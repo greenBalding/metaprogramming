@@ -1,0 +1,62 @@
+{
+  "goal": "build a SGA",
+  "domain": "academic_management",
+  "generated_at": "2026-04-19T20:56:52.653135+00:00",
+  "constraints": {
+    "users": 15000,
+    "cloud": "aws",
+    "compliance": [
+      "LGPD"
+    ]
+  },
+  "assumptions": [
+    "Primary interface is web.",
+    "Role model includes admin, professor, and student.",
+    "System must support auditability for academic records."
+  ],
+  "entities": [
+    "Student",
+    "Professor",
+    "Course",
+    "Enrollment",
+    "Grade",
+    "Attendance",
+    "AcademicPeriod"
+  ],
+  "modules": [
+    "authentication",
+    "student_management",
+    "course_catalog",
+    "enrollment",
+    "grading",
+    "attendance",
+    "reports"
+  ],
+  "workflows": [
+    "Student enrollment lifecycle",
+    "Course assignment by professor",
+    "Grade publishing and transcript generation",
+    "Attendance tracking and alerts"
+  ],
+  "non_functional": {
+    "availability": "99.9%",
+    "api_p95_latency": "< 300ms",
+    "security": [
+      "RBAC",
+      "input validation",
+      "audit logs"
+    ]
+  },
+  "governance": {
+    "approval_gates": [
+      "Production deployment",
+      "Destructive database migrations",
+      "Permission model changes"
+    ],
+    "mandatory_checks": [
+      "Unit tests",
+      "Static analysis",
+      "Dependency vulnerability scan"
+    ]
+  }
+}

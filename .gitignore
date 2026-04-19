@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+
+# Local virtual environments
+.venv/
+venv/
+
+# Logs
+*.log
