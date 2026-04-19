@@ -21,6 +21,26 @@ python3 autonomous_factory/factory.py \
   --output generated
 ```
 
+### Modo interativo
+
+Se quiser preencher lacunas de requisitos com perguntas guiadas:
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --interactive \
+  --output generated
+```
+
+Esse modo pergunta, quando necessario:
+
+- nome do projeto
+- quantidade estimada de usuarios
+- cloud alvo
+- perfil de budget
+- compliance
+- canal principal de entrega
+
 ## Saida esperada
 
 Ao final, voce tera uma estrutura como:
@@ -42,3 +62,9 @@ generated/sga-pilot/
 ## Observacao
 
 Este projeto e o ponto de partida pratico para evoluir para um sistema agentico completo (com execucao de testes, loop de correcao e deploy automatizado).
+
+## Testes
+
+```bash
+python3 -m unittest discover -s autonomous_factory/tests -p "test_*.py"
+```

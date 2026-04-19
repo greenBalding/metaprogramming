@@ -78,6 +78,11 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Ask guided questions to fill missing constraints before generation.",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Overwrite if destination already exists.",
@@ -119,6 +124,80 @@ def parse_constraints(raw_constraints: list[str]) -> dict[str, Any]:
             raise ValueError(f"Invalid constraint '{item}'. Empty key is not allowed.")
         constraints[key] = coerce_constraint_value(key, value)
     return constraints
+
+
+def read_input(prompt: str, default: str | None = None) -> str:
+    suffix = f" [{default}]" if default else ""
+    try:
+        value = input(f"{prompt}{suffix}: ").strip()
+    except EOFError:
+        return default or ""
+    if value:
+        return value
+    return default or ""
+
+
+def read_int(prompt: str, default: int) -> int:
+    while True:
+        value = read_input(prompt, str(default))
+        try:
+            return int(value)
+        except ValueError:
+            print("Please enter a valid integer value.", file=sys.stderr)
+
+
+def read_choice(prompt: str, options: list[str], default: str) -> str:
+    normalized = [option.lower() for option in options]
+    while True:
+        value = read_input(f"{prompt} ({'/'.join(options)})", default).lower()
+        if value in normalized:
+            return value
+        print(f"Please choose one of: {', '.join(options)}", file=sys.stderr)
+
+
+def read_csv(prompt: str, default: list[str] | None = None) -> list[str]:
+    default_text = ",".join(default or [])
+    value = read_input(prompt, default_text)
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def prompt_project_name_interactively(project_name: str) -> str:
+    suggested = project_name or "autonomous-project"
+    chosen_name = read_input("Project name", suggested)
+    return slugify(chosen_name)
+
+
+def collect_constraints_interactively(
+    constraints: dict[str, Any], domain: str
+) -> dict[str, Any]:
+    interactive_constraints = dict(constraints)
+    print("Interactive mode enabled. Press Enter to accept defaults.")
+
+    if "users" not in interactive_constraints and "max_users" not in interactive_constraints:
+        interactive_constraints["users"] = read_int("Estimated users", 3000)
+
+    if "cloud" not in interactive_constraints:
+        interactive_constraints["cloud"] = read_input("Cloud provider", "agnostic")
+
+    if "budget" not in interactive_constraints:
+        interactive_constraints["budget"] = read_choice(
+            "Budget profile", ["low", "medium", "high"], "medium"
+        )
+
+    if "compliance" not in interactive_constraints and "regulations" not in interactive_constraints:
+        default_compliance = ["LGPD"] if domain == "academic_management" else []
+        compliance = read_csv(
+            "Compliance regulations (comma separated)", default_compliance
+        )
+        if compliance:
+            interactive_constraints["compliance"] = compliance
+
+    if domain == "academic_management" and "delivery" not in interactive_constraints:
+        interactive_constraints["delivery"] = read_choice(
+            "Primary delivery channel", ["web", "mobile", "hybrid"], "web"
+        )
+
+    return interactive_constraints
 
 
 def coerce_constraint_value(key: str, value: str) -> Any:
@@ -525,6 +604,13 @@ def main() -> int:
 
     domain = infer_domain(args.goal)
     project_name = args.project_name or slugify(args.goal)
+
+    if args.interactive:
+        project_name = prompt_project_name_interactively(project_name)
+        constraints = collect_constraints_interactively(constraints, domain)
+        print("Resolved constraints:")
+        print(json.dumps(constraints, indent=2, ensure_ascii=True))
+
     output_root = Path(args.output).expanduser().resolve()
     destination = output_root / project_name
 

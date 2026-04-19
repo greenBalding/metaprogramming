@@ -51,6 +51,7 @@ The current implementation is a CLI in [autonomous_factory/factory.py](autonomou
 
 - Parses a high-level goal
 - Infers project domain (academic management or generic web app)
+- Offers guided interactive requirement capture with `--interactive`
 - Applies deterministic architecture selection rules
 - Builds requirements, backlog, and ADR files
 - Generates a starter backend, SQL schema, and Bootstrap frontend
@@ -70,13 +71,12 @@ Use this checklist as an execution path.
   ```bash
   python3 autonomous_factory/factory.py \
     --goal "build a SGA" \
-    --project-name sga-pilot \
-    --constraint users=15000 \
-    --constraint cloud=aws \
-    --constraint compliance=LGPD \
+    --interactive \
     --output generated \
     --force
   ```
+
+  If you prefer non-interactive mode, pass explicit constraints with repeated `--constraint key=value`.
 
 - [ ] Step 2: Inspect generated strategy artifacts
 
@@ -109,6 +109,7 @@ Use this checklist as an execution path.
 
 Try the same generator with different intents and constraints:
 
+- `--goal "build a SGA" --interactive`
 - `--goal "build a SGA for 70000 users" --constraint users=70000`
 - `--goal "build an internal helpdesk web app"`
 - `--constraint budget=low`
@@ -218,7 +219,7 @@ You can treat it as a baseline reference for future runs and improvements.
 
 Near-term planned evolution:
 
-- Interactive clarification loop before generation
+- Persist interactive interview answers as a decision-log artifact
 - Test generation + fix loop (generate -> run -> correct)
 - LLM-backed requirement expansion (with deterministic fallback)
 - Infra and CI artifact generation templates
@@ -285,4 +286,4 @@ If you contribute, include:
 
 ---
 
-If you want, the next step is to add a guided interactive mode (`--interactive`) so the generator asks targeted questions before producing artifacts.
+If you want, the next step is to add CI validation so every push checks generation behavior and test stability automatically.
