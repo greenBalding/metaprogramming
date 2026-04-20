@@ -66,5 +66,9 @@ Este projeto e o ponto de partida pratico para evoluir para um sistema agentico 
 ## Testes
 
 ```bash
+python3 -m pip install ruff
+python3 -m ruff check autonomous_factory
+python3 -m compileall autonomous_factory
+
 python3 -m unittest discover -s autonomous_factory/tests -p "test_*.py"
 ```

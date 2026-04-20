@@ -1,5 +1,7 @@
 # metaprogramming
 
+[![CI](https://github.com/greenBalding/metaprogramming/actions/workflows/ci.yml/badge.svg)](https://github.com/greenBalding/metaprogramming/actions/workflows/ci.yml)
+
 An experimental project to explore a practical path toward autonomous software construction.
 
 The central idea is simple:
@@ -188,13 +190,19 @@ This repository now includes CI at [.github/workflows/ci.yml](.github/workflows/
 
 On every push and pull request to `main`, CI runs:
 
-1. Unit tests for generator logic
-2. Smoke generation of an SGA project
-3. Artifact existence checks for core outputs
+1. Ruff lint on project source
+2. Python syntax compilation check
+3. Unit tests for generator logic
+4. Smoke generation of an SGA project
+5. Artifact existence checks for core outputs
 
 Local equivalent commands:
 
 ```bash
+python3 -m pip install ruff
+python3 -m ruff check autonomous_factory
+python3 -m compileall autonomous_factory
+
 python3 -m unittest discover -s autonomous_factory/tests -p "test_*.py"
 
 python3 autonomous_factory/factory.py \
