@@ -44,6 +44,9 @@ Esse modo pergunta, quando necessario:
 Na primeira execucao, se `config/local_llm.json` nao existir, ele e criado
 automaticamente com recomendacao baseada no hardware local.
 
+Cada geracao tambem escreve um artefato curto de orientacao local em
+`analysis/local-llm-advice.json` e `analysis/local-llm-advice.md`.
+
 ### Dry-run de execucao
 
 Para gerar um relatorio de execucao por fase sem executar mudanças reais:

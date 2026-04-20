@@ -4,6 +4,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+import config.local_llm_client as local_llm_client
+
 from autonomous_factory import factory
 
 
@@ -98,6 +100,57 @@ class FactoryTests(unittest.TestCase):
             config_path = repo_root / "config/local_llm.json"
             payload = json.loads(config_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["model"], "qwen2.5-coder:7b")
+
+    def test_generate_local_llm_advice_falls_back_without_config(self):
+        with TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            advice = local_llm_client.generate_local_llm_advice(
+                repo_root,
+                goal="build a SGA",
+                domain="academic_management",
+                project_name="sga-ci",
+                architecture={"style": "modular monolith"},
+                spec={"modules": ["authentication"], "entities": ["Student"]},
+                decision_log={"entries": []},
+            )
+
+            self.assertEqual(advice["source"], "deterministic-fallback")
+            self.assertIn("authentication", advice["next_step"])
+
+    def test_generate_local_llm_advice_uses_mocked_ollama_response(self):
+        with TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            config_path = repo_root / "config/local_llm.json"
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(
+                json.dumps({"provider": "ollama", "model": "qwen2.5-coder:7b"}),
+                encoding="utf-8",
+            )
+
+            with patch(
+                "config.local_llm_client._run_ollama_prompt",
+                return_value=json.dumps(
+                    {
+                        "summary": "Use qwen2.5-coder:7b for the first bounded step.",
+                        "risk_level": "low",
+                        "next_step": "Generate the first module stub.",
+                        "reason": "Model is a good fit for local code tasks.",
+                    }
+                ),
+            ):
+                advice = local_llm_client.generate_local_llm_advice(
+                    repo_root,
+                    goal="build a SGA",
+                    domain="academic_management",
+                    project_name="sga-ci",
+                    architecture={"style": "modular monolith"},
+                    spec={"modules": ["authentication"], "entities": ["Student"]},
+                    decision_log={"entries": []},
+                )
+
+        self.assertEqual(advice["source"], "ollama")
+        self.assertEqual(advice["model"], "qwen2.5-coder:7b")
+        self.assertEqual(advice["risk_level"], "low")
 
     def test_write_project_creates_expected_artifacts(self):
         with TemporaryDirectory() as tmp_dir:
@@ -314,6 +367,15 @@ class FactoryTests(unittest.TestCase):
                 "hash": decision_log_hash,
                 "artifact": "planning/decision-log.json",
             }
+            local_llm_advice = local_llm_client.generate_local_llm_advice(
+                output_root,
+                goal="build a SGA",
+                domain="academic_management",
+                project_name=project_name,
+                architecture=architecture,
+                spec=spec,
+                decision_log=decision_log,
+            )
 
             factory.write_project(
                 project_root,
@@ -322,6 +384,7 @@ class FactoryTests(unittest.TestCase):
                 architecture,
                 backlog,
                 decision_log,
+                local_llm_advice,
                 execution_report,
                 execution_state,
             )
@@ -333,6 +396,8 @@ class FactoryTests(unittest.TestCase):
             self.assertTrue((project_root / "execution/audit-trail.json").exists())
             self.assertTrue((project_root / "planning/decision-log.json").exists())
             self.assertTrue((project_root / "planning/decision-log.sha256").exists())
+            self.assertTrue((project_root / "analysis/local-llm-advice.json").exists())
+            self.assertTrue((project_root / "analysis/local-llm-advice.md").exists())
 
     def test_execute_phase_actions_writes_evidence_and_advances_phase(self):
         with TemporaryDirectory() as tmp_dir:

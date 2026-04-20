@@ -22,6 +22,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from config.local_llm_client import generate_local_llm_advice, render_local_llm_advice  # noqa: E402
+
 
 DEFAULT_SGA_ENTITIES = [
     "Student",
@@ -1569,6 +1575,7 @@ def write_project(
     architecture: dict[str, Any],
     backlog: list[dict[str, Any]],
     decision_log: dict[str, Any] | None = None,
+    local_llm_advice: dict[str, Any] | None = None,
     execution_report: dict[str, Any] | None = None,
     execution_state: dict[str, Any] | None = None,
 ) -> None:
@@ -1597,6 +1604,16 @@ def write_project(
                 root / "planning/decision-log.sha256",
                 f"{decision_hash}  decision-log.json",
             )
+
+    if local_llm_advice is not None:
+        write_file(
+            root / "analysis/local-llm-advice.json",
+            json.dumps(local_llm_advice, indent=2, ensure_ascii=True),
+        )
+        write_file(
+            root / "analysis/local-llm-advice.md",
+            render_local_llm_advice(local_llm_advice),
+        )
 
     release_gates = spec["governance"]["approval_gates"]
     gates_markdown = "\n".join(f"- {gate}" for gate in release_gates)
@@ -1758,6 +1775,15 @@ def main() -> int:
         if args.dry_run_execution
         else None
     )
+    local_llm_advice = generate_local_llm_advice(
+        repo_root,
+        goal=args.goal,
+        domain=domain,
+        project_name=project_name,
+        architecture=architecture,
+        spec=spec,
+        decision_log=decision_log,
+    )
     execution_state = None
     state_path = (
         Path(args.state_file).expanduser().resolve()
@@ -1810,6 +1836,7 @@ def main() -> int:
         architecture,
         backlog,
         decision_log,
+        local_llm_advice,
         execution_report,
         execution_state,
     )
@@ -1827,6 +1854,8 @@ def main() -> int:
         if args.rollback_last_task:
             print("Rollback processed using the last completed task from the audit trail.")
         print("Execution audit trail written at: execution/audit-trail.json")
+    if local_llm_advice is not None:
+        print("Local LLM advice written at: analysis/local-llm-advice.json")
     print("Next step: inspect planning/execution-plan.md and start implementing phase P2.")
     return 0
 

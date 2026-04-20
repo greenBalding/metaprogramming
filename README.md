@@ -65,6 +65,9 @@ It is intentionally lightweight and deterministic by design.
 On first run, the CLI also auto-generates `config/local_llm.json` if it does not exist,
 using local hardware analysis to recommend a default local model.
 
+Each normal generation also writes a small local-model advisory artifact under
+`analysis/local-llm-advice.json` and `analysis/local-llm-advice.md` in the generated project.
+
 ---
 
 ## Interactive Quick Start
