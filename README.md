@@ -240,6 +240,7 @@ This adds:
 - `execution/runbook.md`
 - `planning/decision-log.json`
 - `planning/decision-log.md`
+- `planning/decision-log.sha256`
 
 ### Persistent Execution State
 
@@ -264,6 +265,7 @@ This persists:
 These artifacts summarize phase status and the next safe action.
 
 The decision log tracks the provenance of key inputs (for example: CLI, inference, and interactive answers).
+Its SHA-256 checksum is persisted and referenced by execution state for traceability.
 
 ### Execute Current Phase (Idempotent)
 

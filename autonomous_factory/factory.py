@@ -14,6 +14,7 @@ used as a practical first step toward a larger agentic system.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -536,6 +537,16 @@ def build_decision_log(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "entries": normalized_entries,
     }
+
+
+def compute_decision_log_hash(decision_log: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        decision_log,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def build_execution_state(
@@ -1496,6 +1507,13 @@ def write_project(
             root / "planning/decision-log.md",
             render_decision_log(decision_log),
         )
+        integrity = decision_log.get("integrity", {})
+        decision_hash = integrity.get("hash")
+        if isinstance(decision_hash, str) and decision_hash:
+            write_file(
+                root / "planning/decision-log.sha256",
+                f"{decision_hash}  decision-log.json",
+            )
 
     release_gates = spec["governance"]["approval_gates"]
     gates_markdown = "\n".join(f"- {gate}" for gate in release_gates)
@@ -1598,6 +1616,12 @@ def main() -> int:
         constraints,
         decision_entries,
     )
+    decision_log_hash = compute_decision_log_hash(decision_log)
+    decision_log["integrity"] = {
+        "algorithm": "sha256",
+        "hash": decision_log_hash,
+        "artifact": "planning/decision-log.json",
+    }
 
     output_root = Path(args.output).expanduser().resolve()
     destination = output_root / project_name
@@ -1658,6 +1682,9 @@ def main() -> int:
             execution_state = rollback_last_task(destination, execution_state)
         else:
             execution_state["last_action"] = execution_state.get("last_action", "initialized")
+
+        execution_state["decision_log_hash"] = decision_log_hash
+        execution_state["decision_log_path"] = "planning/decision-log.json"
 
         if not args.state_file:
             state_path = destination / "execution" / "state.json"

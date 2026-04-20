@@ -57,6 +57,7 @@ Tambem sao gerados:
 
 - `planning/decision-log.json`
 - `planning/decision-log.md`
+- `planning/decision-log.sha256`
 
 ### Estado persistente
 

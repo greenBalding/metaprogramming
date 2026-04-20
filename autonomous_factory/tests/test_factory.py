@@ -84,6 +84,12 @@ class FactoryTests(unittest.TestCase):
                     {"key": "goal", "value": "build a SGA", "source": "input"},
                 ],
             )
+            decision_log_hash = factory.compute_decision_log_hash(decision_log)
+            decision_log["integrity"] = {
+                "algorithm": "sha256",
+                "hash": decision_log_hash,
+                "artifact": "planning/decision-log.json",
+            }
 
             factory.write_project(
                 project_root,
@@ -148,6 +154,23 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(decision_log["entries"][1]["key"], "domain")
         self.assertEqual(decision_log["entries"][1]["source"], "inference")
 
+    def test_compute_decision_log_hash_is_deterministic(self):
+        decision_entries = [
+            {"key": "goal", "value": "build a SGA", "source": "input"},
+            {"key": "domain", "value": "academic_management", "source": "inference"},
+        ]
+        decision_log = factory.build_decision_log(
+            "build a SGA",
+            "academic_management",
+            "sga-ci",
+            {"users": 15000},
+            decision_entries,
+        )
+        first_hash = factory.compute_decision_log_hash(decision_log)
+        second_hash = factory.compute_decision_log_hash(decision_log)
+        self.assertEqual(first_hash, second_hash)
+        self.assertEqual(len(first_hash), 64)
+
     def test_execution_state_advances_progressively(self):
         constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
         spec = factory.build_spec("build a SGA", "academic_management", constraints)
@@ -185,6 +208,12 @@ class FactoryTests(unittest.TestCase):
                     {"key": "goal", "value": "build a SGA", "source": "input"},
                 ],
             )
+            decision_log_hash = factory.compute_decision_log_hash(decision_log)
+            decision_log["integrity"] = {
+                "algorithm": "sha256",
+                "hash": decision_log_hash,
+                "artifact": "planning/decision-log.json",
+            }
 
             factory.write_project(
                 project_root,
@@ -203,6 +232,7 @@ class FactoryTests(unittest.TestCase):
             self.assertTrue((project_root / "execution/state.md").exists())
             self.assertTrue((project_root / "execution/audit-trail.json").exists())
             self.assertTrue((project_root / "planning/decision-log.json").exists())
+            self.assertTrue((project_root / "planning/decision-log.sha256").exists())
 
     def test_execute_phase_actions_writes_evidence_and_advances_phase(self):
         with TemporaryDirectory() as tmp_dir:
