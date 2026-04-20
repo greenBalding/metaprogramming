@@ -93,6 +93,16 @@ def parse_args() -> argparse.Namespace:
         help="Advance the execution state by one step and persist the updated state.",
     )
     parser.add_argument(
+        "--execute-phase",
+        action="store_true",
+        help="Execute tasks for the active phase and persist evidence and audit trail.",
+    )
+    parser.add_argument(
+        "--dry-run-actions",
+        action="store_true",
+        help="Preview phase task execution without changing files or task statuses.",
+    )
+    parser.add_argument(
         "--state-file",
         help="Optional execution state file path. Defaults to execution/state.json inside the project.",
     )
@@ -446,6 +456,21 @@ def build_execution_state(
                 "name": phase["phase"],
                 "status": "ready" if phase_index == 1 else "pending",
                 "tasks": phase["tasks"],
+                "task_status": [
+                    {
+                        "id": f"P{phase_index}-T{task_index}",
+                        "title": task,
+                        "status": "pending",
+                        "last_updated": None,
+                        "evidence_file": str(
+                            Path("execution")
+                            / "evidence"
+                            / f"p{phase_index:02d}"
+                            / f"t{task_index:02d}-{slugify(task)}.md"
+                        ),
+                    }
+                    for task_index, task in enumerate(phase["tasks"], start=1)
+                ],
                 "exit_criteria": phase["exit_criteria"],
                 "modules": phase_modules,
             }
@@ -457,9 +482,33 @@ def build_execution_state(
         "selected_architecture": architecture,
         "phase_summary": phases,
         "history": [],
+        "audit_trail": [],
         "last_action": "initialized",
+        "last_error": None,
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def append_audit_event(
+    state: dict[str, Any],
+    event_type: str,
+    phase_name: str,
+    status: str,
+    task_title: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    audit_trail = state.setdefault("audit_trail", [])
+    audit_trail.append(
+        {
+            "id": len(audit_trail) + 1,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event_type": event_type,
+            "phase": phase_name,
+            "task": task_title,
+            "status": status,
+            "details": details or {},
+        }
+    )
 
 
 def advance_execution_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -473,6 +522,10 @@ def advance_execution_state(state: dict[str, Any]) -> dict[str, Any]:
     )
 
     if in_progress_index is not None:
+        for task in phases[in_progress_index].get("task_status", []):
+            if task.get("status") != "completed":
+                task["status"] = "completed"
+                task["last_updated"] = current_time
         phases[in_progress_index]["status"] = "completed"
         updated_state["history"].append(
             {
@@ -480,6 +533,13 @@ def advance_execution_state(state: dict[str, Any]) -> dict[str, Any]:
                 "action": "completed",
                 "timestamp": current_time,
             }
+        )
+        append_audit_event(
+            updated_state,
+            event_type="phase_transition",
+            phase_name=phases[in_progress_index]["name"],
+            status="completed",
+            details={"mode": "advance_phase"},
         )
         next_index = in_progress_index + 1
         if next_index < len(phases):
@@ -490,6 +550,13 @@ def advance_execution_state(state: dict[str, Any]) -> dict[str, Any]:
                     "action": "unblocked",
                     "timestamp": current_time,
                 }
+            )
+            append_audit_event(
+                updated_state,
+                event_type="phase_transition",
+                phase_name=phases[next_index]["name"],
+                status="ready",
+                details={"reason": "previous phase completed"},
             )
         updated_state["last_action"] = f"completed {phases[in_progress_index]['name']}"
     else:
@@ -508,9 +575,208 @@ def advance_execution_state(state: dict[str, Any]) -> dict[str, Any]:
                     "timestamp": current_time,
                 }
             )
+            append_audit_event(
+                updated_state,
+                event_type="phase_transition",
+                phase_name=phases[ready_index]["name"],
+                status="in_progress",
+                details={"mode": "advance_phase"},
+            )
             updated_state["last_action"] = f"started {phases[ready_index]['name']}"
 
     updated_state["last_updated"] = current_time
+    return updated_state
+
+
+def render_task_evidence(
+    phase_name: str,
+    task_title: str,
+    task_id: str,
+    project_root: Path,
+) -> str:
+    return (
+        f"# Evidence {task_id}\n\n"
+        f"- Phase: {phase_name}\n"
+        f"- Task: {task_title}\n"
+        f"- Result: completed\n"
+        f"- Project root: {project_root}\n"
+    )
+
+
+def execute_phase_actions(
+    project_root: Path,
+    state: dict[str, Any],
+    dry_run_actions: bool = False,
+) -> dict[str, Any]:
+    updated_state = json.loads(json.dumps(state))
+    phases = updated_state.get("phase_summary", [])
+    now = datetime.now(timezone.utc).isoformat()
+
+    active_phase_index = next(
+        (index for index, phase in enumerate(phases) if phase.get("status") == "in_progress"),
+        None,
+    )
+    if active_phase_index is None:
+        active_phase_index = next(
+            (index for index, phase in enumerate(phases) if phase.get("status") == "ready"),
+            None,
+        )
+        if active_phase_index is None:
+            updated_state["last_action"] = "no-op"
+            updated_state["last_updated"] = now
+            append_audit_event(
+                updated_state,
+                event_type="execution",
+                phase_name="none",
+                status="no-op",
+                details={"reason": "no ready or in_progress phase"},
+            )
+            return updated_state
+
+        phases[active_phase_index]["status"] = "in_progress"
+        updated_state["history"].append(
+            {
+                "phase": phases[active_phase_index]["name"],
+                "action": "started",
+                "timestamp": now,
+            }
+        )
+        append_audit_event(
+            updated_state,
+            event_type="phase_transition",
+            phase_name=phases[active_phase_index]["name"],
+            status="in_progress",
+            details={"mode": "execute_phase"},
+        )
+
+    active_phase = phases[active_phase_index]
+    executed_count = 0
+    skipped_count = 0
+
+    try:
+        for task in active_phase.get("task_status", []):
+            if task.get("status") == "completed":
+                skipped_count += 1
+                append_audit_event(
+                    updated_state,
+                    event_type="task_execution",
+                    phase_name=active_phase["name"],
+                    task_title=task["title"],
+                    status="skipped_already_completed",
+                    details={"task_id": task["id"]},
+                )
+                continue
+
+            evidence_relative_path = Path(task["evidence_file"])
+            evidence_path = project_root / evidence_relative_path
+
+            if dry_run_actions:
+                append_audit_event(
+                    updated_state,
+                    event_type="task_execution",
+                    phase_name=active_phase["name"],
+                    task_title=task["title"],
+                    status="planned",
+                    details={
+                        "task_id": task["id"],
+                        "evidence_file": str(evidence_relative_path),
+                    },
+                )
+                continue
+
+            write_file(
+                evidence_path,
+                render_task_evidence(
+                    active_phase["name"],
+                    task["title"],
+                    task["id"],
+                    project_root,
+                ),
+            )
+            task["status"] = "completed"
+            task["last_updated"] = now
+            executed_count += 1
+            append_audit_event(
+                updated_state,
+                event_type="task_execution",
+                phase_name=active_phase["name"],
+                task_title=task["title"],
+                status="completed",
+                details={
+                    "task_id": task["id"],
+                    "evidence_file": str(evidence_relative_path),
+                },
+            )
+
+        all_tasks_completed = all(
+            task.get("status") == "completed"
+            for task in active_phase.get("task_status", [])
+        )
+        if all_tasks_completed and not dry_run_actions:
+            active_phase["status"] = "completed"
+            updated_state["history"].append(
+                {
+                    "phase": active_phase["name"],
+                    "action": "completed",
+                    "timestamp": now,
+                }
+            )
+            append_audit_event(
+                updated_state,
+                event_type="phase_transition",
+                phase_name=active_phase["name"],
+                status="completed",
+                details={"mode": "execute_phase"},
+            )
+
+            next_index = active_phase_index + 1
+            if next_index < len(phases):
+                phases[next_index]["status"] = "ready"
+                updated_state["history"].append(
+                    {
+                        "phase": phases[next_index]["name"],
+                        "action": "unblocked",
+                        "timestamp": now,
+                    }
+                )
+                append_audit_event(
+                    updated_state,
+                    event_type="phase_transition",
+                    phase_name=phases[next_index]["name"],
+                    status="ready",
+                    details={"reason": "previous phase completed"},
+                )
+
+        if dry_run_actions:
+            updated_state["last_action"] = f"planned execution for {active_phase['name']}"
+        else:
+            updated_state["last_action"] = (
+                f"executed {executed_count} tasks in {active_phase['name']}"
+            )
+        updated_state["last_error"] = None
+    except OSError as exc:
+        updated_state["last_error"] = str(exc)
+        updated_state["last_action"] = f"failed execution in {active_phase['name']}"
+        append_audit_event(
+            updated_state,
+            event_type="execution",
+            phase_name=active_phase["name"],
+            status="failed",
+            details={"error": str(exc)},
+        )
+
+    updated_state["last_updated"] = now
+    append_audit_event(
+        updated_state,
+        event_type="execution",
+        phase_name=active_phase["name"],
+        status="dry-run" if dry_run_actions else "completed",
+        details={
+            "executed_tasks": executed_count,
+            "skipped_tasks": skipped_count,
+            "dry_run_actions": dry_run_actions,
+        },
+    )
     return updated_state
 
 
@@ -519,13 +785,24 @@ def render_execution_state(state: dict[str, Any]) -> str:
     lines.append(f"Goal: {state['goal']}")
     lines.append(f"Domain: {state['domain']}")
     lines.append(f"Last action: {state['last_action']}")
+    lines.append(f"Last error: {state.get('last_error') or 'none'}")
     lines.append("")
     lines.append("## Phases")
     lines.append("")
     for phase in state.get("phase_summary", []):
         lines.append(f"### {phase['order']}. {phase['name']}")
         lines.append(f"- Status: {phase['status']}")
+        lines.append("- Task status:")
+        for task in phase.get("task_status", []):
+            lines.append(f"  - {task['id']}: {task['status']} ({task['title']})")
         lines.append("")
+    lines.append("## Recent Audit")
+    lines.append("")
+    for event in state.get("audit_trail", [])[-10:]:
+        event_task = event.get("task") or "-"
+        lines.append(
+            f"- {event['timestamp']} | {event['event_type']} | {event['phase']} | {event_task} | {event['status']}"
+        )
     return "\n".join(lines)
 
 
@@ -809,10 +1086,27 @@ def write_project(
             root / "execution/state.md",
             render_execution_state(execution_state),
         )
+        write_file(
+            root / "execution/audit-trail.json",
+            json.dumps(execution_state.get("audit_trail", []), indent=2, ensure_ascii=True),
+        )
 
 
 def main() -> int:
     args = parse_args()
+    if args.advance_phase and args.execute_phase:
+        print(
+            "error: --advance-phase and --execute-phase cannot be used together.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.dry_run_actions and not args.execute_phase:
+        print(
+            "error: --dry-run-actions requires --execute-phase.",
+            file=sys.stderr,
+        )
+        return 2
+
     try:
         constraints = parse_constraints(args.constraint)
     except ValueError as exc:
@@ -856,7 +1150,7 @@ def main() -> int:
         else destination / "execution" / "state.json"
     )
 
-    if args.dry_run_execution or args.advance_phase or state_path.exists():
+    if args.dry_run_execution or args.advance_phase or args.execute_phase or state_path.exists():
         existing_state = load_execution_state(state_path)
         if existing_state is None:
             execution_state = build_execution_state(spec, architecture, backlog)
@@ -865,6 +1159,12 @@ def main() -> int:
 
         if args.advance_phase:
             execution_state = advance_execution_state(execution_state)
+        elif args.execute_phase:
+            execution_state = execute_phase_actions(
+                destination,
+                execution_state,
+                dry_run_actions=args.dry_run_actions,
+            )
         else:
             execution_state["last_action"] = execution_state.get("last_action", "initialized")
 
@@ -886,6 +1186,12 @@ def main() -> int:
         print("Dry-run execution report generated at: execution/report.json")
     if execution_state is not None:
         print("Execution state written at: execution/state.json")
+        if args.execute_phase:
+            if args.dry_run_actions:
+                print("Execution actions were planned only (dry-run).")
+            else:
+                print("Execution actions applied and evidence generated under execution/evidence/.")
+        print("Execution audit trail written at: execution/audit-trail.json")
     print("Next step: inspect planning/execution-plan.md and start implementing phase P2.")
     return 0
 

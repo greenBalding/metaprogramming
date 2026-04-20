@@ -257,8 +257,29 @@ This persists:
 
 - `execution/state.json`
 - `execution/state.md`
+- `execution/audit-trail.json`
 
 These artifacts summarize phase status and the next safe action.
+
+### Execute Current Phase (Idempotent)
+
+To run the active phase and produce auditable evidence files:
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name stateful-sga \
+  --execute-phase \
+  --output generated \
+  --force
+```
+
+Generated evidence and audit outputs:
+
+- `execution/evidence/`
+- `execution/audit-trail.json`
+
+To preview actions without changing files, add `--dry-run-actions` together with `--execute-phase`.
 
 ---
 

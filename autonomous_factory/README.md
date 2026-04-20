@@ -68,6 +68,25 @@ python3 autonomous_factory/factory.py \
 
 Isso gera `execution/state.json` e `execution/state.md`.
 
+### Execucao de fase (idempotente)
+
+Para executar tarefas da fase ativa e registrar evidencias:
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name stateful-sga \
+  --execute-phase \
+  --output generated
+```
+
+Arquivos relevantes:
+
+- `execution/evidence/`
+- `execution/audit-trail.json`
+
+Para apenas simular, use `--execute-phase --dry-run-actions`.
+
 ## Saida esperada
 
 Ao final, voce tera uma estrutura como:
