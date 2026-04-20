@@ -291,6 +291,22 @@ Concrete handler outputs include:
 
 To preview actions without changing files, add `--dry-run-actions` together with `--execute-phase`.
 
+### Rollback Last Task
+
+To rollback the most recently completed task using the persisted audit trail:
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name stateful-sga \
+  --rollback-last-task \
+  --output generated \
+  --force
+```
+
+Rollback removes artifacts created by the last completed task and sets that task back to `pending`.
+If the task only updated existing files, those files are reported as non-reverted in `execution/audit-trail.json`.
+
 ---
 
 ## Repository Layout

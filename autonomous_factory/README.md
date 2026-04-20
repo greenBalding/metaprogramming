@@ -96,6 +96,20 @@ Exemplos de artefatos gerados pelos handlers:
 
 Para apenas simular, use `--execute-phase --dry-run-actions`.
 
+### Rollback da ultima tarefa
+
+Para reverter a ultima tarefa concluida (via audit trail):
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name stateful-sga \
+  --rollback-last-task \
+  --output generated
+```
+
+O rollback remove arquivos criados pela tarefa e marca a tarefa novamente como `pending`.
+
 ## Saida esperada
 
 Ao final, voce tera uma estrutura como:

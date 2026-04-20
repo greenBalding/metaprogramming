@@ -103,6 +103,11 @@ def parse_args() -> argparse.Namespace:
         help="Preview phase task execution without changing files or task statuses.",
     )
     parser.add_argument(
+        "--rollback-last-task",
+        action="store_true",
+        help="Rollback the most recently completed task using the execution audit trail.",
+    )
+    parser.add_argument(
         "--state-file",
         help="Optional execution state file path. Defaults to execution/state.json inside the project.",
     )
@@ -699,15 +704,15 @@ def apply_task_handler(
     state: dict[str, Any],
     phase_name: str,
     task_title: str,
-) -> list[str]:
+) -> dict[str, str]:
     spec = state.get("spec_snapshot", {})
-    changed_files: list[str] = []
+    file_changes: dict[str, str] = {}
 
     def write_and_track(relative_path: str, content: str) -> None:
         path = project_root / relative_path
         change_result = write_file_if_changed(path, content)
         if change_result in {"created", "updated"}:
-            changed_files.append(relative_path)
+            file_changes[relative_path] = change_result
 
     if task_title == "Validate goal against domain ontology":
         payload = {
@@ -768,7 +773,118 @@ def apply_task_handler(
             "# Rollback Drill\n\n- [ ] Simulate failed deployment\n- [ ] Restore previous artifact\n- [ ] Validate post-rollback health\n",
         )
 
-    return changed_files
+    return file_changes
+
+
+def remove_file_and_empty_parents(path: Path, stop_at: Path) -> bool:
+    if not path.exists() or not path.is_file():
+        return False
+    path.unlink()
+
+    current = path.parent
+    while current != stop_at and current.exists():
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+    return True
+
+
+def rollback_last_task(project_root: Path, state: dict[str, Any]) -> dict[str, Any]:
+    updated_state = json.loads(json.dumps(state))
+    phases = updated_state.get("phase_summary", [])
+    now = datetime.now(timezone.utc).isoformat()
+
+    last_task_event = next(
+        (
+            event
+            for event in reversed(updated_state.get("audit_trail", []))
+            if event.get("event_type") == "task_execution" and event.get("status") == "completed"
+        ),
+        None,
+    )
+
+    if last_task_event is None:
+        updated_state["last_action"] = "rollback no-op (no completed task found)"
+        updated_state["last_updated"] = now
+        append_audit_event(
+            updated_state,
+            event_type="rollback",
+            phase_name="none",
+            status="no-op",
+            details={"reason": "no completed task in audit trail"},
+        )
+        return updated_state
+
+    phase_name = str(last_task_event.get("phase", ""))
+    task_title = str(last_task_event.get("task", ""))
+    details = last_task_event.get("details", {}) or {}
+    file_changes = details.get("file_changes", {}) or {}
+
+    reverted_files: list[str] = []
+    non_reverted_files: list[str] = []
+    removed_evidence = False
+
+    for relative_path, change_type in file_changes.items():
+        if change_type != "created":
+            non_reverted_files.append(relative_path)
+            continue
+
+        removed = remove_file_and_empty_parents(project_root / relative_path, project_root)
+        if removed:
+            reverted_files.append(relative_path)
+        else:
+            non_reverted_files.append(relative_path)
+
+    for phase_index, phase in enumerate(phases):
+        if phase.get("name") != phase_name:
+            continue
+
+        for task in phase.get("task_status", []):
+            if task.get("title") != task_title:
+                continue
+            task["status"] = "pending"
+            task["last_updated"] = now
+
+            evidence_file = task.get("evidence_file")
+            if evidence_file:
+                removed_evidence = remove_file_and_empty_parents(
+                    project_root / evidence_file,
+                    project_root,
+                )
+            break
+
+        phase["status"] = "in_progress"
+        next_index = phase_index + 1
+        if next_index < len(phases) and phases[next_index].get("status") == "ready":
+            phases[next_index]["status"] = "pending"
+        break
+
+    updated_state["history"].append(
+        {
+            "phase": phase_name,
+            "action": "rolled_back_last_task",
+            "timestamp": now,
+        }
+    )
+    append_audit_event(
+        updated_state,
+        event_type="rollback",
+        phase_name=phase_name,
+        task_title=task_title,
+        status="completed",
+        details={
+            "reverted_files": reverted_files,
+            "non_reverted_files": non_reverted_files,
+            "removed_evidence": removed_evidence,
+            "source_event_id": last_task_event.get("id"),
+        },
+    )
+    updated_state["last_action"] = f"rolled back task '{task_title}' in {phase_name}"
+    updated_state["last_error"] = None
+    updated_state["last_updated"] = now
+    return updated_state
 
 
 def execute_phase_actions(
@@ -852,12 +968,13 @@ def execute_phase_actions(
                 )
                 continue
 
-            changed_files = apply_task_handler(
+            file_changes = apply_task_handler(
                 project_root,
                 updated_state,
                 active_phase["name"],
                 task["title"],
             )
+            changed_files = sorted(file_changes)
             write_file(
                 evidence_path,
                 render_task_evidence(
@@ -881,6 +998,7 @@ def execute_phase_actions(
                     "task_id": task["id"],
                     "evidence_file": str(evidence_relative_path),
                     "changed_files": changed_files,
+                    "file_changes": file_changes,
                 },
             )
 
@@ -1276,6 +1394,12 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    if args.rollback_last_task and (args.advance_phase or args.execute_phase):
+        print(
+            "error: --rollback-last-task cannot be combined with --advance-phase or --execute-phase.",
+            file=sys.stderr,
+        )
+        return 2
     if args.dry_run_actions and not args.execute_phase:
         print(
             "error: --dry-run-actions requires --execute-phase.",
@@ -1326,8 +1450,20 @@ def main() -> int:
         else destination / "execution" / "state.json"
     )
 
-    if args.dry_run_execution or args.advance_phase or args.execute_phase or state_path.exists():
+    if (
+        args.dry_run_execution
+        or args.advance_phase
+        or args.execute_phase
+        or args.rollback_last_task
+        or state_path.exists()
+    ):
         existing_state = load_execution_state(state_path)
+        if args.rollback_last_task and existing_state is None:
+            print(
+                "error: cannot rollback because no execution state file was found.",
+                file=sys.stderr,
+            )
+            return 2
         if existing_state is None:
             execution_state = build_execution_state(spec, architecture, backlog)
         else:
@@ -1341,6 +1477,8 @@ def main() -> int:
                 execution_state,
                 dry_run_actions=args.dry_run_actions,
             )
+        elif args.rollback_last_task:
+            execution_state = rollback_last_task(destination, execution_state)
         else:
             execution_state["last_action"] = execution_state.get("last_action", "initialized")
 
@@ -1367,6 +1505,8 @@ def main() -> int:
                 print("Execution actions were planned only (dry-run).")
             else:
                 print("Execution actions applied and evidence generated under execution/evidence/.")
+        if args.rollback_last_task:
+            print("Rollback processed using the last completed task from the audit trail.")
         print("Execution audit trail written at: execution/audit-trail.json")
     print("Next step: inspect planning/execution-plan.md and start implementing phase P2.")
     return 0

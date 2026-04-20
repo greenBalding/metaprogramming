@@ -258,6 +258,48 @@ class FactoryTests(unittest.TestCase):
             self.assertEqual(generated_modules, sorted(spec["modules"]))
             self.assertEqual(state["phase_summary"][2]["status"], "completed")
 
+    def test_rollback_last_task_reverts_created_files_and_task_status(self):
+        with TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir) / "sga-exec"
+            constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
+            spec = factory.build_spec("build a SGA", "academic_management", constraints)
+            architecture = factory.choose_architecture(constraints, "academic_management")
+            backlog = factory.build_backlog(spec, architecture)
+            state = factory.build_execution_state(spec, architecture, backlog)
+
+            state = factory.execute_phase_actions(project_root, state)
+            self.assertTrue((project_root / "spec/requirements.lock.json").exists())
+
+            rolled_back = factory.rollback_last_task(project_root, state)
+
+            self.assertFalse((project_root / "spec/requirements.lock.json").exists())
+            p0_tasks = rolled_back["phase_summary"][0]["task_status"]
+            freeze_task = [task for task in p0_tasks if task["title"] == "Freeze machine-readable specification"][0]
+            self.assertEqual(freeze_task["status"], "pending")
+            self.assertEqual(rolled_back["phase_summary"][0]["status"], "in_progress")
+            rollback_events = [
+                event for event in rolled_back["audit_trail"] if event["event_type"] == "rollback"
+            ]
+            self.assertEqual(len(rollback_events), 1)
+            self.assertEqual(rollback_events[0]["status"], "completed")
+
+    def test_rollback_last_task_without_completed_event_is_noop(self):
+        constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
+        spec = factory.build_spec("build a SGA", "academic_management", constraints)
+        architecture = factory.choose_architecture(constraints, "academic_management")
+        backlog = factory.build_backlog(spec, architecture)
+        state = factory.build_execution_state(spec, architecture, backlog)
+
+        with TemporaryDirectory() as tmp_dir:
+            rolled_back = factory.rollback_last_task(Path(tmp_dir) / "sga-exec", state)
+
+        self.assertIn("no-op", rolled_back["last_action"])
+        rollback_events = [
+            event for event in rolled_back["audit_trail"] if event["event_type"] == "rollback"
+        ]
+        self.assertEqual(len(rollback_events), 1)
+        self.assertEqual(rollback_events[0]["status"], "no-op")
+
 
 if __name__ == "__main__":
     unittest.main()
