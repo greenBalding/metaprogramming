@@ -109,6 +109,11 @@ def parse_args() -> argparse.Namespace:
         help="Rollback the most recently completed task using the execution audit trail.",
     )
     parser.add_argument(
+        "--verify-decision-log",
+        action="store_true",
+        help="Verify decision-log.json integrity using embedded hash and checksum file.",
+    )
+    parser.add_argument(
         "--state-file",
         help="Optional execution state file path. Defaults to execution/state.json inside the project.",
     )
@@ -547,6 +552,40 @@ def compute_decision_log_hash(decision_log: dict[str, Any]) -> str:
         sort_keys=True,
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def verify_decision_log_integrity(project_root: Path) -> tuple[bool, str]:
+    decision_log_path = project_root / "planning" / "decision-log.json"
+    checksum_path = project_root / "planning" / "decision-log.sha256"
+
+    if not decision_log_path.exists():
+        return False, "missing planning/decision-log.json"
+    if not checksum_path.exists():
+        return False, "missing planning/decision-log.sha256"
+
+    decision_log = json.loads(decision_log_path.read_text(encoding="utf-8"))
+    embedded_integrity = decision_log.get("integrity", {})
+    embedded_hash = embedded_integrity.get("hash")
+    if not isinstance(embedded_hash, str) or not embedded_hash:
+        return False, "decision-log.json has no embedded integrity hash"
+
+    # Recompute hash without the integrity field to match generation flow.
+    normalized_payload = dict(decision_log)
+    normalized_payload.pop("integrity", None)
+    recalculated_hash = compute_decision_log_hash(normalized_payload)
+
+    checksum_line = checksum_path.read_text(encoding="utf-8").strip()
+    checksum_parts = checksum_line.split()
+    if len(checksum_parts) < 1:
+        return False, "invalid checksum file format"
+    checksum_hash = checksum_parts[0]
+
+    if embedded_hash != recalculated_hash:
+        return False, "embedded hash mismatch in decision-log.json"
+    if checksum_hash != recalculated_hash:
+        return False, "checksum mismatch in planning/decision-log.sha256"
+
+    return True, "decision log integrity verified"
 
 
 def build_execution_state(
@@ -1560,6 +1599,18 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    if args.verify_decision_log and (
+        args.advance_phase
+        or args.execute_phase
+        or args.rollback_last_task
+        or args.dry_run_execution
+        or args.interactive
+    ):
+        print(
+            "error: --verify-decision-log cannot be combined with generation/execution flags.",
+            file=sys.stderr,
+        )
+        return 2
     if args.rollback_last_task and (args.advance_phase or args.execute_phase):
         print(
             "error: --rollback-last-task cannot be combined with --advance-phase or --execute-phase.",
@@ -1625,6 +1676,20 @@ def main() -> int:
 
     output_root = Path(args.output).expanduser().resolve()
     destination = output_root / project_name
+
+    if args.verify_decision_log:
+        if not destination.exists():
+            print(
+                f"error: destination '{destination}' does not exist for verification.",
+                file=sys.stderr,
+            )
+            return 2
+        verified, message = verify_decision_log_integrity(destination)
+        if verified:
+            print(f"OK: {message}")
+            return 0
+        print(f"error: {message}", file=sys.stderr)
+        return 1
 
     if destination.exists() and any(destination.iterdir()) and not args.force:
         print(

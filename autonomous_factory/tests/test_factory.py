@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -170,6 +171,67 @@ class FactoryTests(unittest.TestCase):
         second_hash = factory.compute_decision_log_hash(decision_log)
         self.assertEqual(first_hash, second_hash)
         self.assertEqual(len(first_hash), 64)
+
+    def test_verify_decision_log_integrity_success(self):
+        with TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir) / "sga-ci"
+            decision_log = factory.build_decision_log(
+                "build a SGA",
+                "academic_management",
+                "sga-ci",
+                {"users": 15000},
+                [{"key": "goal", "value": "build a SGA", "source": "input"}],
+            )
+            decision_hash = factory.compute_decision_log_hash(decision_log)
+            decision_log["integrity"] = {
+                "algorithm": "sha256",
+                "hash": decision_hash,
+                "artifact": "planning/decision-log.json",
+            }
+            factory.write_file(
+                project_root / "planning/decision-log.json",
+                json.dumps(decision_log, indent=2, ensure_ascii=True),
+            )
+            factory.write_file(
+                project_root / "planning/decision-log.sha256",
+                f"{decision_hash}  decision-log.json",
+            )
+
+            verified, message = factory.verify_decision_log_integrity(project_root)
+            self.assertTrue(verified)
+            self.assertIn("verified", message)
+
+    def test_verify_decision_log_integrity_detects_tampering(self):
+        with TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir) / "sga-ci"
+            decision_log = factory.build_decision_log(
+                "build a SGA",
+                "academic_management",
+                "sga-ci",
+                {"users": 15000},
+                [{"key": "goal", "value": "build a SGA", "source": "input"}],
+            )
+            decision_hash = factory.compute_decision_log_hash(decision_log)
+            decision_log["integrity"] = {
+                "algorithm": "sha256",
+                "hash": decision_hash,
+                "artifact": "planning/decision-log.json",
+            }
+
+            tampered_log = dict(decision_log)
+            tampered_log["constraints"] = {"users": 99999}
+            factory.write_file(
+                project_root / "planning/decision-log.json",
+                json.dumps(tampered_log, indent=2, ensure_ascii=True),
+            )
+            factory.write_file(
+                project_root / "planning/decision-log.sha256",
+                f"{decision_hash}  decision-log.json",
+            )
+
+            verified, message = factory.verify_decision_log_integrity(project_root)
+            self.assertFalse(verified)
+            self.assertIn("mismatch", message)
 
     def test_execution_state_advances_progressively(self):
         constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}

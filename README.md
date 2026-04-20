@@ -314,6 +314,24 @@ Rollback removes artifacts created by the last completed task and sets that task
 When a task updates existing files, the previous content is snapshotted and restored during rollback.
 If a previous snapshot is unavailable, the file is reported as non-reverted in `execution/audit-trail.json`.
 
+### Verify Decision Log Integrity
+
+To verify if `planning/decision-log.json` still matches its embedded hash and checksum file:
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name stateful-sga \
+  --verify-decision-log \
+  --output generated
+```
+
+This command exits with:
+
+- `0` when integrity is valid
+- `1` when mismatch is detected
+- `2` for usage/configuration errors
+
 ---
 
 ## Repository Layout

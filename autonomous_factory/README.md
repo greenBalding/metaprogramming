@@ -117,6 +117,18 @@ python3 autonomous_factory/factory.py \
 O rollback remove arquivos criados pela tarefa e marca a tarefa novamente como `pending`.
 Quando a tarefa atualiza arquivo existente, o conteudo anterior e restaurado por snapshot.
 
+### Verificacao de integridade
+
+Para verificar a integridade do decision log:
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name stateful-sga \
+  --verify-decision-log \
+  --output generated
+```
+
 ## Saida esperada
 
 Ao final, voce tera uma estrutura como:
