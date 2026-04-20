@@ -52,9 +52,19 @@ jobs:
             --output generated \
             --force
 
+      - name: Verify decision log integrity
+        run: |
+          python autonomous_factory/factory.py \
+            --goal "build a SGA" \
+            --project-name ci-smoke-sga \
+            --verify-decision-log \
+            --output generated
+
       - name: Verify generated artifacts
         run: |
           test -f generated/ci-smoke-sga/spec/requirements.json
           test -f generated/ci-smoke-sga/architecture/adr-0001-initial-architecture.md
           test -f generated/ci-smoke-sga/planning/execution-plan.md
+          test -f generated/ci-smoke-sga/planning/decision-log.json
+          test -f generated/ci-smoke-sga/planning/decision-log.sha256
           test -f generated/ci-smoke-sga/scaffold/backend/app/main.py

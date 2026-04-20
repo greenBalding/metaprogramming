@@ -195,7 +195,8 @@ On every push and pull request to `main`, CI runs:
 2. Python syntax compilation check
 3. Unit tests for generator logic
 4. Smoke generation of an SGA project
-5. Artifact existence checks for core outputs
+5. Decision-log integrity verification (`--verify-decision-log`)
+6. Artifact existence checks for core outputs
 
 Local equivalent commands:
 
