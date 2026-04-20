@@ -53,6 +53,21 @@ python3 autonomous_factory/factory.py \
   --output generated
 ```
 
+### Estado persistente
+
+Para avancar o estado entre execucoes:
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name stateful-sga \
+  --dry-run-execution \
+  --advance-phase \
+  --output generated
+```
+
+Isso gera `execution/state.json` e `execution/state.md`.
+
 ## Saida esperada
 
 Ao final, voce tera uma estrutura como:

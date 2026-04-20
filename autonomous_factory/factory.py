@@ -88,6 +88,15 @@ def parse_args() -> argparse.Namespace:
         help="Generate a phase-by-phase execution report without performing destructive actions.",
     )
     parser.add_argument(
+        "--advance-phase",
+        action="store_true",
+        help="Advance the execution state by one step and persist the updated state.",
+    )
+    parser.add_argument(
+        "--state-file",
+        help="Optional execution state file path. Defaults to execution/state.json inside the project.",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Overwrite if destination already exists.",
@@ -421,6 +430,111 @@ def build_execution_report(
     }
 
 
+def build_execution_state(
+    spec: dict[str, Any], architecture: dict[str, Any], backlog: list[dict[str, Any]]
+) -> dict[str, Any]:
+    phases = []
+    for phase_index, phase in enumerate(backlog, start=1):
+        phase_modules = [
+            task.removeprefix("Implement module: ")
+            for task in phase["tasks"]
+            if task.startswith("Implement module: ")
+        ]
+        phases.append(
+            {
+                "order": phase_index,
+                "name": phase["phase"],
+                "status": "ready" if phase_index == 1 else "pending",
+                "tasks": phase["tasks"],
+                "exit_criteria": phase["exit_criteria"],
+                "modules": phase_modules,
+            }
+        )
+
+    return {
+        "goal": spec["goal"],
+        "domain": spec["domain"],
+        "selected_architecture": architecture,
+        "phase_summary": phases,
+        "history": [],
+        "last_action": "initialized",
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def advance_execution_state(state: dict[str, Any]) -> dict[str, Any]:
+    updated_state = json.loads(json.dumps(state))
+    phases = updated_state.get("phase_summary", [])
+    current_time = datetime.now(timezone.utc).isoformat()
+
+    in_progress_index = next(
+        (index for index, phase in enumerate(phases) if phase.get("status") == "in_progress"),
+        None,
+    )
+
+    if in_progress_index is not None:
+        phases[in_progress_index]["status"] = "completed"
+        updated_state["history"].append(
+            {
+                "phase": phases[in_progress_index]["name"],
+                "action": "completed",
+                "timestamp": current_time,
+            }
+        )
+        next_index = in_progress_index + 1
+        if next_index < len(phases):
+            phases[next_index]["status"] = "ready"
+            updated_state["history"].append(
+                {
+                    "phase": phases[next_index]["name"],
+                    "action": "unblocked",
+                    "timestamp": current_time,
+                }
+            )
+        updated_state["last_action"] = f"completed {phases[in_progress_index]['name']}"
+    else:
+        ready_index = next(
+            (index for index, phase in enumerate(phases) if phase.get("status") == "ready"),
+            None,
+        )
+        if ready_index is None:
+            updated_state["last_action"] = "no-op"
+        else:
+            phases[ready_index]["status"] = "in_progress"
+            updated_state["history"].append(
+                {
+                    "phase": phases[ready_index]["name"],
+                    "action": "started",
+                    "timestamp": current_time,
+                }
+            )
+            updated_state["last_action"] = f"started {phases[ready_index]['name']}"
+
+    updated_state["last_updated"] = current_time
+    return updated_state
+
+
+def render_execution_state(state: dict[str, Any]) -> str:
+    lines: list[str] = ["# Execution State", ""]
+    lines.append(f"Goal: {state['goal']}")
+    lines.append(f"Domain: {state['domain']}")
+    lines.append(f"Last action: {state['last_action']}")
+    lines.append("")
+    lines.append("## Phases")
+    lines.append("")
+    for phase in state.get("phase_summary", []):
+        lines.append(f"### {phase['order']}. {phase['name']}")
+        lines.append(f"- Status: {phase['status']}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def load_execution_state(state_path: Path) -> dict[str, Any] | None:
+    if not state_path.exists():
+        return None
+    return json.loads(state_path.read_text(encoding="utf-8"))
+
+
 def render_execution_runbook(execution_report: dict[str, Any]) -> str:
     lines: list[str] = ["# Execution Runbook", ""]
     lines.append(f"Goal: {execution_report['goal']}")
@@ -653,6 +767,7 @@ def write_project(
     architecture: dict[str, Any],
     backlog: list[dict[str, Any]],
     execution_report: dict[str, Any] | None = None,
+    execution_state: dict[str, Any] | None = None,
 ) -> None:
     write_file(root / "README.md", render_root_readme(project_name, spec))
     write_file(root / "spec/requirements.json", json.dumps(spec, indent=2, ensure_ascii=True))
@@ -683,6 +798,16 @@ def write_project(
         write_file(
             root / "execution/runbook.md",
             render_execution_runbook(execution_report),
+        )
+
+    if execution_state is not None:
+        write_file(
+            root / "execution/state.json",
+            json.dumps(execution_state, indent=2, ensure_ascii=True),
+        )
+        write_file(
+            root / "execution/state.md",
+            render_execution_state(execution_state),
         )
 
 
@@ -724,6 +849,27 @@ def main() -> int:
         if args.dry_run_execution
         else None
     )
+    execution_state = None
+    state_path = (
+        Path(args.state_file).expanduser().resolve()
+        if args.state_file
+        else destination / "execution" / "state.json"
+    )
+
+    if args.dry_run_execution or args.advance_phase or state_path.exists():
+        existing_state = load_execution_state(state_path)
+        if existing_state is None:
+            execution_state = build_execution_state(spec, architecture, backlog)
+        else:
+            execution_state = existing_state
+
+        if args.advance_phase:
+            execution_state = advance_execution_state(execution_state)
+        else:
+            execution_state["last_action"] = execution_state.get("last_action", "initialized")
+
+        if not args.state_file:
+            state_path = destination / "execution" / "state.json"
 
     write_project(
         destination,
@@ -732,11 +878,14 @@ def main() -> int:
         architecture,
         backlog,
         execution_report,
+        execution_state,
     )
 
     print(f"Project generated at: {destination}")
     if execution_report is not None:
         print("Dry-run execution report generated at: execution/report.json")
+    if execution_state is not None:
+        print("Execution state written at: execution/state.json")
     print("Next step: inspect planning/execution-plan.md and start implementing phase P2.")
     return 0
 

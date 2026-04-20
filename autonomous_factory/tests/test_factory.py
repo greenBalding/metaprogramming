@@ -111,6 +111,22 @@ class FactoryTests(unittest.TestCase):
         )
         self.assertIn("planned_modules", execution_report["module_coverage"])
 
+    def test_execution_state_advances_progressively(self):
+        constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
+        spec = factory.build_spec("build a SGA", "academic_management", constraints)
+        architecture = factory.choose_architecture(constraints, "academic_management")
+        backlog = factory.build_backlog(spec, architecture)
+
+        state = factory.build_execution_state(spec, architecture, backlog)
+        self.assertEqual(state["phase_summary"][0]["status"], "ready")
+
+        state = factory.advance_execution_state(state)
+        self.assertEqual(state["phase_summary"][0]["status"], "in_progress")
+
+        state = factory.advance_execution_state(state)
+        self.assertEqual(state["phase_summary"][0]["status"], "completed")
+        self.assertEqual(state["phase_summary"][1]["status"], "ready")
+
     def test_write_project_persists_execution_artifacts(self):
         with TemporaryDirectory() as tmp_dir:
             output_root = Path(tmp_dir)
@@ -122,6 +138,7 @@ class FactoryTests(unittest.TestCase):
             architecture = factory.choose_architecture(constraints, "academic_management")
             backlog = factory.build_backlog(spec, architecture)
             execution_report = factory.build_execution_report(spec, architecture, backlog)
+            execution_state = factory.build_execution_state(spec, architecture, backlog)
 
             factory.write_project(
                 project_root,
@@ -130,10 +147,13 @@ class FactoryTests(unittest.TestCase):
                 architecture,
                 backlog,
                 execution_report,
+                execution_state,
             )
 
             self.assertTrue((project_root / "execution/report.json").exists())
             self.assertTrue((project_root / "execution/runbook.md").exists())
+            self.assertTrue((project_root / "execution/state.json").exists())
+            self.assertTrue((project_root / "execution/state.md").exists())
 
 
 if __name__ == "__main__":

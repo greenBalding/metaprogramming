@@ -239,6 +239,25 @@ This adds:
 - `execution/report.json`
 - `execution/runbook.md`
 
+### Persistent Execution State
+
+If you want the generator to track progress between runs, add `--advance-phase`.
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name stateful-sga \
+  --dry-run-execution \
+  --advance-phase \
+  --output generated \
+  --force
+```
+
+This persists:
+
+- `execution/state.json`
+- `execution/state.md`
+
 These artifacts summarize phase status and the next safe action.
 
 ---
