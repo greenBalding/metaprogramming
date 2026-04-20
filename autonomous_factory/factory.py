@@ -489,6 +489,7 @@ def build_execution_state(
         "phase_summary": phases,
         "history": [],
         "audit_trail": [],
+        "rolled_back_event_ids": [],
         "last_action": "initialized",
         "last_error": None,
         "last_updated": datetime.now(timezone.utc).isoformat(),
@@ -704,15 +705,19 @@ def apply_task_handler(
     state: dict[str, Any],
     phase_name: str,
     task_title: str,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     spec = state.get("spec_snapshot", {})
     file_changes: dict[str, str] = {}
+    backup_contents: dict[str, str] = {}
 
     def write_and_track(relative_path: str, content: str) -> None:
         path = project_root / relative_path
+        previous_content = path.read_text(encoding="utf-8") if path.exists() else None
         change_result = write_file_if_changed(path, content)
         if change_result in {"created", "updated"}:
             file_changes[relative_path] = change_result
+        if change_result == "updated" and previous_content is not None:
+            backup_contents[relative_path] = previous_content
 
     if task_title == "Validate goal against domain ontology":
         payload = {
@@ -773,7 +778,10 @@ def apply_task_handler(
             "# Rollback Drill\n\n- [ ] Simulate failed deployment\n- [ ] Restore previous artifact\n- [ ] Validate post-rollback health\n",
         )
 
-    return file_changes
+    return {
+        "file_changes": file_changes,
+        "backup_contents": backup_contents,
+    }
 
 
 def remove_file_and_empty_parents(path: Path, stop_at: Path) -> bool:
@@ -794,13 +802,16 @@ def remove_file_and_empty_parents(path: Path, stop_at: Path) -> bool:
 def rollback_last_task(project_root: Path, state: dict[str, Any]) -> dict[str, Any]:
     updated_state = json.loads(json.dumps(state))
     phases = updated_state.get("phase_summary", [])
+    rolled_back_event_ids = updated_state.setdefault("rolled_back_event_ids", [])
     now = datetime.now(timezone.utc).isoformat()
 
     last_task_event = next(
         (
             event
             for event in reversed(updated_state.get("audit_trail", []))
-            if event.get("event_type") == "task_execution" and event.get("status") == "completed"
+            if event.get("event_type") == "task_execution"
+            and event.get("status") == "completed"
+            and event.get("id") not in rolled_back_event_ids
         ),
         None,
     )
@@ -821,21 +832,27 @@ def rollback_last_task(project_root: Path, state: dict[str, Any]) -> dict[str, A
     task_title = str(last_task_event.get("task", ""))
     details = last_task_event.get("details", {}) or {}
     file_changes = details.get("file_changes", {}) or {}
+    backup_contents = details.get("backup_contents", {}) or {}
 
     reverted_files: list[str] = []
     non_reverted_files: list[str] = []
     removed_evidence = False
 
     for relative_path, change_type in file_changes.items():
-        if change_type != "created":
-            non_reverted_files.append(relative_path)
+        if change_type == "created":
+            removed = remove_file_and_empty_parents(project_root / relative_path, project_root)
+            if removed:
+                reverted_files.append(relative_path)
+            else:
+                non_reverted_files.append(relative_path)
             continue
 
-        removed = remove_file_and_empty_parents(project_root / relative_path, project_root)
-        if removed:
+        if change_type == "updated" and relative_path in backup_contents:
+            write_file(project_root / relative_path, str(backup_contents[relative_path]))
             reverted_files.append(relative_path)
-        else:
-            non_reverted_files.append(relative_path)
+            continue
+
+        non_reverted_files.append(relative_path)
 
     for phase_index, phase in enumerate(phases):
         if phase.get("name") != phase_name:
@@ -881,6 +898,8 @@ def rollback_last_task(project_root: Path, state: dict[str, Any]) -> dict[str, A
             "source_event_id": last_task_event.get("id"),
         },
     )
+    if last_task_event.get("id") is not None:
+        rolled_back_event_ids.append(last_task_event["id"])
     updated_state["last_action"] = f"rolled back task '{task_title}' in {phase_name}"
     updated_state["last_error"] = None
     updated_state["last_updated"] = now
@@ -968,12 +987,14 @@ def execute_phase_actions(
                 )
                 continue
 
-            file_changes = apply_task_handler(
+            handler_result = apply_task_handler(
                 project_root,
                 updated_state,
                 active_phase["name"],
                 task["title"],
             )
+            file_changes = handler_result["file_changes"]
+            backup_contents = handler_result["backup_contents"]
             changed_files = sorted(file_changes)
             write_file(
                 evidence_path,
@@ -999,6 +1020,7 @@ def execute_phase_actions(
                     "evidence_file": str(evidence_relative_path),
                     "changed_files": changed_files,
                     "file_changes": file_changes,
+                    "backup_contents": backup_contents,
                 },
             )
 

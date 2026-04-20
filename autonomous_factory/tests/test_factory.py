@@ -300,6 +300,76 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(len(rollback_events), 1)
         self.assertEqual(rollback_events[0]["status"], "no-op")
 
+    def test_rollback_last_task_restores_updated_file_content(self):
+        with TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir) / "sga-exec"
+            constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
+            spec = factory.build_spec("build a SGA", "academic_management", constraints)
+            architecture = factory.choose_architecture(constraints, "academic_management")
+            backlog = factory.build_backlog(spec, architecture)
+            state = factory.build_execution_state(spec, architecture, backlog)
+
+            phase = state["phase_summary"][1]
+            task = [
+                item
+                for item in phase["task_status"]
+                if item["title"] == "Define API contract and database schema"
+            ][0]
+            phase["status"] = "ready"
+            state["phase_summary"] = [
+                {
+                    "order": 1,
+                    "name": phase["name"],
+                    "status": "ready",
+                    "tasks": [task["title"]],
+                    "task_status": [task],
+                    "exit_criteria": phase["exit_criteria"],
+                    "modules": [],
+                }
+            ]
+
+            previous_content = "# Previous contract\n"
+            factory.write_file(project_root / "planning/api-contract.md", previous_content)
+
+            executed = factory.execute_phase_actions(project_root, state)
+            self.assertNotEqual(
+                (project_root / "planning/api-contract.md").read_text(encoding="utf-8"),
+                previous_content,
+            )
+
+            rolled_back = factory.rollback_last_task(project_root, executed)
+            self.assertEqual(
+                (project_root / "planning/api-contract.md").read_text(encoding="utf-8"),
+                previous_content,
+            )
+            rollback_event = [
+                event
+                for event in rolled_back["audit_trail"]
+                if event["event_type"] == "rollback"
+            ][0]
+            self.assertIn("planning/api-contract.md", rollback_event["details"]["reverted_files"])
+
+    def test_rollback_twice_targets_previous_completed_tasks(self):
+        with TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir) / "sga-exec"
+            constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
+            spec = factory.build_spec("build a SGA", "academic_management", constraints)
+            architecture = factory.choose_architecture(constraints, "academic_management")
+            backlog = factory.build_backlog(spec, architecture)
+            state = factory.build_execution_state(spec, architecture, backlog)
+
+            executed = factory.execute_phase_actions(project_root, state)
+            self.assertTrue((project_root / "spec/requirements.lock.json").exists())
+            self.assertTrue((project_root / "planning/constraint-resolution.md").exists())
+
+            rolled_once = factory.rollback_last_task(project_root, executed)
+            self.assertFalse((project_root / "spec/requirements.lock.json").exists())
+            self.assertTrue((project_root / "planning/constraint-resolution.md").exists())
+
+            rolled_twice = factory.rollback_last_task(project_root, rolled_once)
+            self.assertFalse((project_root / "planning/constraint-resolution.md").exists())
+            self.assertEqual(len(rolled_twice["rolled_back_event_ids"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

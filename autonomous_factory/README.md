@@ -109,6 +109,7 @@ python3 autonomous_factory/factory.py \
 ```
 
 O rollback remove arquivos criados pela tarefa e marca a tarefa novamente como `pending`.
+Quando a tarefa atualiza arquivo existente, o conteudo anterior e restaurado por snapshot.
 
 ## Saida esperada
 

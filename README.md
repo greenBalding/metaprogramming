@@ -305,7 +305,8 @@ python3 autonomous_factory/factory.py \
 ```
 
 Rollback removes artifacts created by the last completed task and sets that task back to `pending`.
-If the task only updated existing files, those files are reported as non-reverted in `execution/audit-trail.json`.
+When a task updates existing files, the previous content is snapshotted and restored during rollback.
+If a previous snapshot is unavailable, the file is reported as non-reverted in `execution/audit-trail.json`.
 
 ---
 
