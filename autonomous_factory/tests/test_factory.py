@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -152,6 +154,77 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(advice["model"], "qwen2.5-coder:7b")
         self.assertEqual(advice["risk_level"], "low")
 
+    def test_derive_local_llm_focus_uses_next_step_module(self):
+        advice = {
+            "source": "ollama",
+            "model": "qwen2.5-coder:7b",
+            "summary": "Start with enrollment to reduce coupling.",
+            "next_step": "Implement the enrollment module first.",
+            "reason": "Enrollment is the first user-facing workflow.",
+            "risk_level": "low",
+        }
+        spec = {"modules": ["authentication", "enrollment", "reports"]}
+
+        focus = local_llm_client.derive_local_llm_focus(advice, spec)
+
+        self.assertEqual(focus["phase"], "P2 - Build core modules")
+        self.assertEqual(focus["module"], "enrollment")
+        self.assertEqual(focus["task_title"], "Implement module: enrollment")
+
+    def test_write_project_creates_local_llm_focus_artifacts(self):
+        with TemporaryDirectory() as tmp_dir:
+            output_root = Path(tmp_dir)
+            project_name = "sga-ci"
+            project_root = output_root / project_name
+
+            constraints = {
+                "users": 12000,
+                "cloud": "aws",
+                "budget": "medium",
+                "compliance": ["LGPD"],
+            }
+            spec = factory.build_spec("build a SGA", "academic_management", constraints)
+            architecture = factory.choose_architecture(constraints, "academic_management")
+            backlog = factory.build_backlog(spec, architecture)
+            decision_log = factory.build_decision_log(
+                "build a SGA",
+                "academic_management",
+                project_name,
+                constraints,
+                [
+                    {"key": "goal", "value": "build a SGA", "source": "input"},
+                ],
+            )
+            decision_log_hash = factory.compute_decision_log_hash(decision_log)
+            decision_log["integrity"] = {
+                "algorithm": "sha256",
+                "hash": decision_log_hash,
+                "artifact": "planning/decision-log.json",
+            }
+
+            local_llm_advice = {
+                "source": "ollama",
+                "model": "qwen2.5-coder:7b",
+                "summary": "Focus on enrollment first.",
+                "risk_level": "low",
+                "next_step": "Implement the enrollment module first.",
+                "reason": "Enrollment is the most valuable first slice.",
+                "generated_at": "2026-04-20T00:00:00+00:00",
+            }
+
+            factory.write_project(
+                project_root,
+                project_name,
+                spec,
+                architecture,
+                backlog,
+                decision_log,
+                local_llm_advice,
+            )
+
+            self.assertTrue((project_root / "execution/ai-focus.json").exists())
+            self.assertTrue((project_root / "execution/ai-focus.md").exists())
+
     def test_write_project_creates_expected_artifacts(self):
         with TemporaryDirectory() as tmp_dir:
             output_root = Path(tmp_dir)
@@ -195,6 +268,8 @@ class FactoryTests(unittest.TestCase):
             expected_files = [
                 "README.md",
                 "spec/requirements.json",
+                "planning/intent-contract.json",
+                "planning/intent-contract.md",
                 "architecture/adr-0001-initial-architecture.md",
                 "planning/backlog.json",
                 "planning/execution-plan.md",
@@ -210,6 +285,52 @@ class FactoryTests(unittest.TestCase):
                     (project_root / relative_path).exists(),
                     msg=f"Missing generated artifact: {relative_path}",
                 )
+
+    def test_cli_generates_generic_project_end_to_end(self):
+        with TemporaryDirectory() as tmp_dir:
+            output_root = Path(tmp_dir) / "generated"
+            project_name = "support-portal-smoke"
+            repo_root = Path(__file__).resolve().parents[2]
+            command = [
+                sys.executable,
+                str(repo_root / "autonomous_factory" / "factory.py"),
+                "--goal",
+                "build a customer support portal",
+                "--project-name",
+                project_name,
+                "--constraint",
+                "users=2500",
+                "--constraint",
+                "cloud=aws",
+                "--output",
+                str(output_root),
+                "--force",
+            ]
+
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+            project_root = output_root / project_name
+            self.assertTrue((project_root / "spec/requirements.json").exists())
+            self.assertTrue((project_root / "planning/intent-contract.json").exists())
+            self.assertTrue((project_root / "execution/state.json").exists())
+
+            requirements = json.loads(
+                (project_root / "spec/requirements.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(requirements["domain"], "generic_web_application")
+            self.assertIn("User", requirements["entities"])
+
+            intent_contract = json.loads(
+                (project_root / "planning/intent-contract.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(intent_contract["goal"], "build a customer support portal")
+            self.assertEqual(intent_contract["project_name"], project_name)
 
     def test_execution_report_includes_phase_statuses(self):
         constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}

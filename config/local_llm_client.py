@@ -221,3 +221,53 @@ def render_local_llm_advice(advice: dict[str, Any]) -> str:
     lines.append("")
     lines.append(str(advice.get("generated_at", "-")))
     return "\n".join(lines)
+
+
+def derive_local_llm_focus(advice: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
+    modules = list(spec.get("modules", []))
+    primary_module = modules[0] if modules else "core_domain"
+
+    next_step = str(advice.get("next_step", "")).lower()
+    if primary_module not in next_step and modules:
+        for module in modules:
+            if module.lower() in next_step:
+                primary_module = module
+                break
+
+    task_title = f"Implement module: {primary_module}"
+    return {
+        "phase": "P2 - Build core modules",
+        "module": primary_module,
+        "task_title": task_title,
+        "source": advice.get("source", "deterministic-fallback"),
+        "model": advice.get("model"),
+        "risk_level": advice.get("risk_level", "low"),
+        "summary": advice.get("summary", ""),
+        "next_step": advice.get("next_step", ""),
+        "reason": advice.get("reason", ""),
+        "generated_at": advice.get("generated_at", datetime.now(timezone.utc).isoformat()),
+    }
+
+
+def render_local_llm_focus(focus: dict[str, Any]) -> str:
+    lines = ["# Local LLM Focus", ""]
+    lines.append(f"Phase: {focus.get('phase', '-')}")
+    lines.append(f"Module: {focus.get('module', '-')}")
+    lines.append(f"Task: {focus.get('task_title', '-')}")
+    lines.append(f"Source: {focus.get('source', '-')}")
+    if focus.get("model"):
+        lines.append(f"Model: {focus['model']}")
+    lines.append(f"Risk level: {focus.get('risk_level', '-')}")
+    lines.append("")
+    lines.append("## Summary")
+    lines.append("")
+    lines.append(str(focus.get("summary", "-")))
+    lines.append("")
+    lines.append("## Next Step")
+    lines.append("")
+    lines.append(str(focus.get("next_step", "-")))
+    lines.append("")
+    lines.append("## Reason")
+    lines.append("")
+    lines.append(str(focus.get("reason", "-")))
+    return "\n".join(lines)

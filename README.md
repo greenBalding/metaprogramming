@@ -6,7 +6,7 @@ An experimental project to explore a practical path toward autonomous software c
 
 The central idea is simple:
 
-> You provide a high-level goal such as `build a SGA` and the system converts it into a deterministic engineering baseline: specification, architecture decision, phased backlog, governance gates, and starter scaffold.
+> You provide a high-level goal such as `build a customer support portal` and the system converts it into a deterministic engineering baseline: specification, architecture decision, phased backlog, governance gates, and starter scaffold.
 
 This repository currently contains a first MVP of that concept.
 
@@ -54,10 +54,10 @@ This makes the output inspectable, testable, and easy to evolve.
 The current implementation is a CLI in [autonomous_factory/factory.py](autonomous_factory/factory.py) that:
 
 - Parses a high-level goal
-- Infers project domain (academic management or generic web app)
+- Infers project domain from the goal and constraints
 - Offers guided interactive requirement capture with `--interactive`
 - Applies deterministic architecture selection rules
-- Builds requirements, backlog, and ADR files
+- Builds requirements, intent contracts, backlog, and ADR files
 - Generates a starter backend, SQL schema, and Bootstrap frontend
 
 It is intentionally lightweight and deterministic by design.
@@ -80,9 +80,7 @@ Use this checklist as an execution path.
 
   ```bash
   python3 autonomous_factory/factory.py \
-    --goal "build a SGA" \
-    --interactive \
-    --output generated \
+  --goal "build a customer support portal" \
     --force
   ```
 
@@ -92,15 +90,16 @@ Use this checklist as an execution path.
 
   Open:
 
-  - [generated/sga-pilot/spec/requirements.json](generated/sga-pilot/spec/requirements.json)
-  - [generated/sga-pilot/architecture/adr-0001-initial-architecture.md](generated/sga-pilot/architecture/adr-0001-initial-architecture.md)
-  - [generated/sga-pilot/planning/execution-plan.md](generated/sga-pilot/planning/execution-plan.md)
-  - [generated/sga-pilot/governance/release-gates.md](generated/sga-pilot/governance/release-gates.md)
+  - [generated/portal-pilot/spec/requirements.json](generated/portal-pilot/spec/requirements.json)
+  - [generated/portal-pilot/planning/intent-contract.json](generated/portal-pilot/planning/intent-contract.json)
+  - [generated/portal-pilot/architecture/adr-0001-initial-architecture.md](generated/portal-pilot/architecture/adr-0001-initial-architecture.md)
+  - [generated/portal-pilot/planning/execution-plan.md](generated/portal-pilot/planning/execution-plan.md)
+  - [generated/portal-pilot/governance/release-gates.md](generated/portal-pilot/governance/release-gates.md)
 
 - [ ] Step 3: Run scaffold backend
 
   ```bash
-  cd generated/sga-pilot/scaffold/backend/app
+  cd generated/portal-pilot/scaffold/backend/app
   python3 main.py
   ```
 
@@ -112,15 +111,15 @@ Use this checklist as an execution path.
 
 - [ ] Step 4: Review generated frontend placeholder
 
-  Open [generated/sga-pilot/scaffold/frontend/index.html](generated/sga-pilot/scaffold/frontend/index.html).
+  Open [generated/portal-pilot/scaffold/frontend/index.html](generated/portal-pilot/scaffold/frontend/index.html).
 
 <details>
 <summary>Interactive Prompt Ideas</summary>
 
 Try the same generator with different intents and constraints:
 
-- `--goal "build a SGA" --interactive`
-- `--goal "build a SGA for 70000 users" --constraint users=70000`
+- `--goal "build a customer support portal" --interactive`
+- `--goal "build a customer support portal for 70000 users" --constraint users=70000`
 - `--goal "build an internal helpdesk web app"`
 - `--constraint budget=low`
 - `--constraint compliance=LGPD,FERPA`

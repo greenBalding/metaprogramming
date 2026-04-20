@@ -1,8 +1,9 @@
 # Autonomous Factory MVP
 
-Este MVP pega um comando de alto nivel (ex.: `build a SGA`) e gera, de forma deterministica:
+Este MVP pega um comando de alto nivel (ex.: `build a customer support portal`) e gera, de forma deterministica:
 
 - especificacao estruturada (`requirements.json`)
+- contrato de intencao (`planning/intent-contract.json`)
 - decisao arquitetural inicial (ADR)
 - backlog por fases
 - scaffold inicial de backend, banco e frontend
@@ -13,11 +14,10 @@ No diretorio raiz do repositorio:
 
 ```bash
 python3 autonomous_factory/factory.py \
-  --goal "build a SGA" \
-  --project-name sga-pilot \
+  --goal "build a customer support portal" \
+  --project-name portal-pilot \
   --constraint users=15000 \
   --constraint cloud=aws \
-  --constraint compliance=LGPD \
   --output generated
 ```
 
@@ -27,7 +27,7 @@ Se quiser preencher lacunas de requisitos com perguntas guiadas:
 
 ```bash
 python3 autonomous_factory/factory.py \
-  --goal "build a SGA" \
+  --goal "build a customer support portal" \
   --interactive \
   --output generated
 ```
@@ -40,6 +40,8 @@ Esse modo pergunta, quando necessario:
 - perfil de budget
 - compliance
 - canal principal de entrega
+
+O exemplo SGA continua valido como benchmark, mas a plataforma aceita qualquer objetivo de software.
 
 Na primeira execucao, se `config/local_llm.json` nao existir, ele e criado
 automaticamente com recomendacao baseada no hardware local.
