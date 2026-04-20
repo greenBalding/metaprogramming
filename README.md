@@ -279,6 +279,16 @@ Generated evidence and audit outputs:
 - `execution/evidence/`
 - `execution/audit-trail.json`
 
+Concrete handler outputs include:
+
+- `execution/validation/domain-check.json`
+- `planning/constraint-resolution.md`
+- `spec/requirements.lock.json`
+- `architecture/implementation-notes.md`
+- `planning/api-contract.md`
+- `.github/workflows/ci-generated.yml`
+- `scaffold/backend/app/modules/*.py`
+
 To preview actions without changing files, add `--dry-run-actions` together with `--execute-phase`.
 
 ---

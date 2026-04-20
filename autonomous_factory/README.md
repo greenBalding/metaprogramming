@@ -85,6 +85,15 @@ Arquivos relevantes:
 - `execution/evidence/`
 - `execution/audit-trail.json`
 
+Exemplos de artefatos gerados pelos handlers:
+
+- `execution/validation/domain-check.json`
+- `planning/constraint-resolution.md`
+- `spec/requirements.lock.json`
+- `planning/api-contract.md`
+- `.github/workflows/ci-generated.yml`
+- `scaffold/backend/app/modules/*.py`
+
 Para apenas simular, use `--execute-phase --dry-run-actions`.
 
 ## Saida esperada

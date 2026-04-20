@@ -218,6 +218,46 @@ class FactoryTests(unittest.TestCase):
             skipped = [event for event in task_events if event["status"] == "skipped_already_completed"]
             self.assertEqual(len(skipped), 1)
 
+    def test_execute_phase_actions_generates_handler_artifacts(self):
+        with TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir) / "sga-exec"
+            constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
+            spec = factory.build_spec("build a SGA", "academic_management", constraints)
+            architecture = factory.choose_architecture(constraints, "academic_management")
+            backlog = factory.build_backlog(spec, architecture)
+            state = factory.build_execution_state(spec, architecture, backlog)
+
+            state = factory.execute_phase_actions(project_root, state)
+
+            self.assertTrue((project_root / "execution/validation/domain-check.json").exists())
+            self.assertTrue((project_root / "planning/constraint-resolution.md").exists())
+            self.assertTrue((project_root / "spec/requirements.lock.json").exists())
+
+            state = factory.execute_phase_actions(project_root, state)
+
+            self.assertTrue((project_root / "architecture/implementation-notes.md").exists())
+            self.assertTrue((project_root / "planning/api-contract.md").exists())
+            self.assertTrue((project_root / ".github/workflows/ci-generated.yml").exists())
+
+    def test_execute_phase_actions_generates_module_stubs_in_p2(self):
+        with TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir) / "sga-exec"
+            constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
+            spec = factory.build_spec("build a SGA", "academic_management", constraints)
+            architecture = factory.choose_architecture(constraints, "academic_management")
+            backlog = factory.build_backlog(spec, architecture)
+            state = factory.build_execution_state(spec, architecture, backlog)
+
+            state = factory.execute_phase_actions(project_root, state)
+            state = factory.execute_phase_actions(project_root, state)
+            state = factory.execute_phase_actions(project_root, state)
+
+            modules_dir = project_root / "scaffold/backend/app/modules"
+            self.assertTrue(modules_dir.exists())
+            generated_modules = sorted(path.stem for path in modules_dir.glob("*.py"))
+            self.assertEqual(generated_modules, sorted(spec["modules"]))
+            self.assertEqual(state["phase_summary"][2]["status"], "completed")
+
 
 if __name__ == "__main__":
     unittest.main()
