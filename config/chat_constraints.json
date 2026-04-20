@@ -1,0 +1,37 @@
+[
+  {
+    "key": "users",
+    "type": "int",
+    "required": true,
+    "aliases": ["users", "usuario", "usuarios", "people"],
+    "question": "Quantos usuarios voce espera? Exemplo: 5000"
+  },
+  {
+    "key": "cloud",
+    "type": "enum",
+    "required": true,
+    "options": ["aws", "azure", "gcp", "agnostic"],
+    "question": "Qual cloud voce prefere?"
+  },
+  {
+    "key": "budget",
+    "type": "enum",
+    "required": false,
+    "options": ["low", "medium", "high"],
+    "question": "Qual perfil de budget?"
+  },
+  {
+    "key": "compliance",
+    "type": "csv",
+    "required": false,
+    "question": "Quais compliance/regulacoes precisa? (ex: LGPD, FERPA)"
+  },
+  {
+    "key": "delivery",
+    "type": "enum",
+    "required": false,
+    "domains": ["academic_management"],
+    "options": ["web", "mobile", "hybrid"],
+    "question": "Qual canal principal de entrega?"
+  }
+]

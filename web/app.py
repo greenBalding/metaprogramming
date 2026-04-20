@@ -1,338 +1,374 @@
-"""
-Web backend for the metaprogramming platform.
-Integrates the interactive factory with a conversational interface.
-"""
+"""Web backend for the metaprogramming platform chat interface."""
+
+from __future__ import annotations
 
 import json
-import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Optional
-from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# Add parent directory to path so we can import factory
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from autonomous_factory import factory
+# Add parent directory to path so we can import the factory module.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+from autonomous_factory import factory  # noqa: E402
 
 app = FastAPI(title="Metaprogramming Platform")
-
-# Serve static files (HTML, CSS, JS)
 web_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=web_dir), name="static")
 
-# Store conversation state
-conversations = {}
+SCHEMA_PATH = REPO_ROOT / "config" / "chat_constraints.json"
+
+conversations: dict[str, dict[str, Any]] = {}
 
 
 class ChatRequest(BaseModel):
     message: str
     conversationId: str
     projectName: Optional[str] = None
-    projectData: Optional[dict] = None
+    projectData: Optional[dict[str, Any]] = None
 
 
 class ChatResponse(BaseModel):
     response: str
     projectName: Optional[str] = None
-    projectData: Optional[dict] = None
+    projectData: Optional[dict[str, Any]] = None
     projectGenerated: bool = False
     projectPath: Optional[str] = None
     systemMessage: Optional[str] = None
     error: Optional[str] = None
 
 
-def get_or_create_conversation(conv_id: str) -> dict:
-    """Get or create a conversation state."""
+def load_constraint_schema() -> list[dict[str, Any]]:
+    payload = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("chat_constraints.json must be a list")
+    return payload
+
+
+def field_applies_to_domain(field: dict[str, Any], domain: str) -> bool:
+    domains = field.get("domains")
+    if domains is None:
+        return True
+    if not isinstance(domains, list):
+        return True
+    return domain in domains
+
+
+def pending_required_fields(
+    constraints: dict[str, Any],
+    domain: str,
+    schema: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    pending: list[dict[str, Any]] = []
+    for field in schema:
+        if not field_applies_to_domain(field, domain):
+            continue
+        if not field.get("required", False):
+            continue
+        key = field.get("key")
+        if not isinstance(key, str):
+            continue
+        if key not in constraints:
+            pending.append(field)
+    return pending
+
+
+def format_question(field: dict[str, Any]) -> str:
+    question = field.get("question")
+    if isinstance(question, str) and question.strip():
+        if field.get("type") == "enum" and isinstance(field.get("options"), list):
+            options = ", ".join(str(opt) for opt in field["options"])
+            return f"{question.strip()} ({options})"
+        return question.strip()
+
+    key = field.get("key", "constraint")
+    return f"Informe valor para: {key}"
+
+
+def slugify(value: str) -> str:
+    cleaned = re.sub(r"[^\w\s-]", "", value).strip().lower()
+    return re.sub(r"[-\s]+", "-", cleaned) or "autonomous-project"
+
+
+def parse_int_from_message(message: str, aliases: list[str], contextual: bool) -> Optional[int]:
+    text = message.strip().lower()
+    if contextual and re.fullmatch(r"\d+", text):
+        return int(text)
+
+    alias_pattern = "|".join(re.escape(alias) for alias in aliases) if aliases else ""
+    if alias_pattern:
+        match = re.search(rf"(\d+)\s*(?:{alias_pattern})", text, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+
+    return None
+
+
+def parse_enum_from_message(message: str, options: list[str], contextual: bool) -> Optional[str]:
+    text = message.strip().lower()
+    if contextual and text in options:
+        return text
+
+    for option in options:
+        if re.search(rf"\b{re.escape(option)}\b", text):
+            return option
+    return None
+
+
+def parse_csv_from_message(message: str) -> Optional[list[str]]:
+    if "," not in message:
+        return None
+    items = [part.strip() for part in message.split(",") if part.strip()]
+    return items or None
+
+
+def parse_constraints_from_message(
+    message: str,
+    constraints: dict[str, Any],
+    domain: str,
+    schema: list[dict[str, Any]],
+) -> dict[str, Any]:
+    updates: dict[str, Any] = {}
+    pending = pending_required_fields(constraints, domain, schema)
+    contextual_key = pending[0]["key"] if pending else None
+
+    for field in schema:
+        if not field_applies_to_domain(field, domain):
+            continue
+
+        key = field.get("key")
+        if not isinstance(key, str):
+            continue
+        if key in constraints or key in updates:
+            continue
+
+        field_type = str(field.get("type", "string")).lower()
+        contextual = key == contextual_key
+
+        if field_type == "int":
+            aliases = field.get("aliases") if isinstance(field.get("aliases"), list) else []
+            value = parse_int_from_message(message, [str(a) for a in aliases], contextual)
+            if value is not None:
+                updates[key] = value
+
+        elif field_type == "enum":
+            options_raw = field.get("options") if isinstance(field.get("options"), list) else []
+            options = [str(opt).lower() for opt in options_raw]
+            value = parse_enum_from_message(message, options, contextual)
+            if value is not None:
+                updates[key] = value
+
+        elif field_type == "csv":
+            value = parse_csv_from_message(message)
+            if value is not None:
+                updates[key] = value
+
+        elif message.strip():
+            updates[key] = message.strip()
+
+    return updates
+
+
+def next_missing_question(
+    constraints: dict[str, Any],
+    domain: str,
+    schema: list[dict[str, Any]],
+) -> Optional[str]:
+    pending = pending_required_fields(constraints, domain, schema)
+    if not pending:
+        return None
+    return format_question(pending[0])
+
+
+def get_or_create_conversation(conv_id: str) -> dict[str, Any]:
     if conv_id not in conversations:
         conversations[conv_id] = {
-            "messages": [],
-            "state": "initial",  # initial, collecting_goal, collecting_constraints, generating, complete
-            "goal": None,
+            "state": "initial",
+            "goal": "",
             "constraints": {},
-            "project_name": None,
-            "domain": None,
-            "architecture": None,
+            "project_name": "",
+            "domain": "",
+            "architecture": "",
         }
     return conversations[conv_id]
 
 
-def extract_goal_and_constraints(message: str) -> tuple:
-    """
-    Extract goal and constraints from user message.
-    Example: "build a support portal for 5000 users on AWS"
-    Returns: (goal, constraints)
-    """
-    import re
+def build_project(goal: str, constraints: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    domain = factory.infer_domain(goal)
+    project_name = slugify(goal)
 
-    goal = message
-    constraints = {}
+    decision_entries: list[dict[str, Any]] = []
+    factory.append_decision(decision_entries, key="goal", value=goal, source="input")
+    factory.append_decision(
+        decision_entries,
+        key="domain",
+        value=domain,
+        source="inference",
+        note="Inferred from goal keywords.",
+    )
+    factory.append_decision(
+        decision_entries,
+        key="project_name",
+        value=project_name,
+        source="derived",
+    )
+    for key, value in sorted(constraints.items()):
+        factory.append_decision(decision_entries, key=key, value=value, source="chat")
 
-    # Extract users
-    users_match = re.search(r'(\d+)\s*(?:users?|people)', message, re.IGNORECASE)
-    if users_match:
-        constraints['users'] = int(users_match.group(1))
+    spec = factory.build_spec(goal, domain, constraints)
+    architecture = factory.choose_architecture(constraints, domain)
+    backlog = factory.build_backlog(spec, architecture)
 
-    # Extract cloud provider
-    for cloud in ['aws', 'azure', 'gcp', 'google cloud']:
-        if cloud.lower() in message.lower():
-            constraints['cloud'] = cloud.split()[0].lower()  # get first word
-            break
+    decision_log = factory.build_decision_log(
+        goal,
+        domain,
+        project_name,
+        constraints,
+        decision_entries,
+    )
+    decision_hash = factory.compute_decision_log_hash(decision_log)
+    decision_log["integrity"] = {
+        "algorithm": "sha256",
+        "hash": decision_hash,
+        "artifact": "planning/decision-log.json",
+    }
 
-    # Extract budget
-    for budget in ['low', 'medium', 'high']:
-        if budget in message.lower():
-            constraints['budget'] = budget
-            break
+    output_root = Path("generated").resolve()
+    destination = output_root / project_name
+    destination.mkdir(parents=True, exist_ok=True)
 
-    # Extract compliance
-    compliance_match = re.search(r'(?:complian[t|ce]|gdpr|hipaa|lgpd|ferpa)[:\s]+([^,.]*)', 
-                                 message, re.IGNORECASE)
-    if compliance_match:
-        compliance_str = compliance_match.group(1).strip()
-        constraints['compliance'] = [c.strip() for c in compliance_str.split(',')]
+    execution_state = factory.build_execution_state(spec, architecture, backlog)
 
-    return goal, constraints
+    factory.write_project(
+        root=destination,
+        project_name=project_name,
+        spec=spec,
+        architecture=architecture,
+        backlog=backlog,
+        decision_log=decision_log,
+        execution_state=execution_state,
+    )
 
-
-def slugify(value: str) -> str:
-    """Convert string to URL-safe slug."""
-    import re
-    value = re.sub(r'[^\w\s-]', '', value).strip()
-    value = re.sub(r'[-\s]+', '-', value)
-    return value.lower()
-
-
-def build_assistant_response(conv: dict, user_message: str) -> dict[str, Any]:
-    """Build appropriate assistant response based on conversation state."""
-
-    if conv["state"] == "initial":
-        # Extract goal and constraints from initial message
-        goal, constraints = extract_goal_and_constraints(user_message)
-        conv["goal"] = goal
-        conv["constraints"] = constraints
-
-        response_text = f"Great! So you want to: **{goal}**\n\n"
-
-        if constraints:
-            response_text += "I detected these constraints:\n"
-            for key, value in constraints.items():
-                response_text += f"• {key}: {value}\n"
-            response_text += "\n"
-
-        # Ask for missing constraints
-        response_text += "Let me ask a few clarifying questions:\n\n"
-
-        if "users" not in constraints:
-            response_text += "1. **How many users** do you expect? (e.g., 1000, 10000)"
-            conv["state"] = "collecting_constraints"
-            return {
-                "response": response_text,
-                "projectName": None,
-                "projectData": {},
-                "projectGenerated": False,
-            }
-
-        if "cloud" not in constraints:
-            response_text += "2. **Which cloud provider** (AWS, Azure, GCP, or agnostic)?"
-            conv["state"] = "collecting_constraints"
-            return {
-                "response": response_text,
-                "projectName": None,
-                "projectData": {},
-                "projectGenerated": False,
-            }
-
-        # All constraints collected, move to generation
-        conv["state"] = "generating"
-        return {
-            "response": "Perfect! I have all the info. Generating your project...",
-            "projectName": None,
-            "projectData": {},
-            "projectGenerated": False,
-        }
-
-    elif conv["state"] == "collecting_constraints":
-        # Parse constraint from user message
-        if "users" not in conv["constraints"]:
-            users_match = None
-            import re
-            match = re.search(r'(\d+)', user_message)
-            if match:
-                conv["constraints"]["users"] = int(match.group(1))
-                return {
-                    "response": "Got it! **What cloud provider** do you prefer? (AWS, Azure, GCP, or agnostic)",
-                    "projectName": None,
-                    "projectData": {},
-                    "projectGenerated": False,
-                }
-
-        if "cloud" not in conv["constraints"]:
-            for cloud in ['aws', 'azure', 'gcp', 'google cloud', 'agnostic']:
-                if cloud.lower() in user_message.lower():
-                    conv["constraints"]["cloud"] = cloud.split()[0].lower()
-                    conv["state"] = "generating"
-                    return {
-                        "response": "Perfect! Generating your project scaffold now...",
-                        "projectName": None,
-                        "projectData": {},
-                        "projectGenerated": False,
-                    }
-
-        return {
-            "response": "Sorry, I didn't understand. Can you clarify?",
-            "projectName": None,
-            "projectData": {},
-            "projectGenerated": False,
-        }
-
-    elif conv["state"] == "generating":
-        # Actually generate the project
-        try:
-            goal = conv["goal"]
-            constraints = conv["constraints"]
-
-            # Derive project name from goal
-                project_name = slugify(goal)
-            conv["project_name"] = project_name
-
-            # Build the project
-                spec = factory.build_spec(goal, "generic_web_application", constraints)
-            architecture = factory.choose_architecture(constraints, spec.get("domain", "generic_web_application"))
-            backlog = factory.build_backlog(spec, architecture)
-                decision_log = factory.build_decision_log(project_name, goal, constraints, spec, architecture, backlog)
-
-            # Create project directory
-            output_dir = Path("generated") / project_name
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            # Write all artifacts
-            factory.write_project(
-                project_path=str(output_dir),
-                goal=goal,
-                constraints=constraints,
-                spec=spec,
-                architecture=architecture,
-                backlog=backlog,
-                decision_log=decision_log,
-            )
-
-            conv["state"] = "complete"
-            conv["domain"] = spec.get("domain")
-            conv["architecture"] = architecture.get("style")
-
-            response_text = f"""✅ **Project Generated Successfully!**
-
-**Project:** {project_name}
-**Domain:** {spec.get("domain", "generic")}
-**Architecture:** {architecture.get("style", "unknown")}
-
-📁 **Location:** `generated/{project_name}`
-
-**Generated Artifacts:**
-• Specification (`spec/requirements.json`)
-• Architecture Decision Record (`architecture/adr-0001-initial-architecture.md`)
-• Intent Contract (`planning/intent-contract.json`)
-• Execution Plan (`planning/execution-plan.md`)
-• Backlog (`planning/backlog.json`)
-• Project Scaffold (`scaffold/backend`, `scaffold/frontend`, `scaffold/database`)
-
-**Next Steps:**
-1. Review the execution plan: `planning/execution-plan.md`
-2. Start the backend: `cd generated/{project_name}/scaffold/backend/app && python3 main.py`
-3. Open the frontend: `generated/{project_name}/scaffold/frontend/index.html`
-
-What would you like to do next?"""
-
-            return {
-                "response": response_text,
-                "projectName": project_name,
-                "projectData": {
-                    "domain": spec.get("domain"),
-                    "architecture": architecture.get("style"),
-                    "entities": spec.get("entities", []),
-                    "modules": spec.get("modules", []),
-                },
-                "projectGenerated": True,
-                "projectPath": str(output_dir),
-                "systemMessage": f"Project {project_name} is ready to use!",
-            }
-
-        except Exception as e:
-            conv["state"] = "complete"
-            return {
-                "error": f"Failed to generate project: {str(e)}",
-                "projectName": None,
-                "projectData": {},
-                "projectGenerated": False,
-            }
-
-    elif conv["state"] == "complete":
-        # Handle post-generation interactions
-        response_text = f"""Your project **{conv['project_name']}** is ready!
-
-You can:
-• Review the generated code in `generated/{conv['project_name']}`
-• Run the backend: `cd generated/{conv['project_name']}/scaffold/backend/app && python3 main.py`
-• Customize any files you need
-• Or describe a new project to build another one
-
-What would you like to do?"""
-
-        return {
-            "response": response_text,
-            "projectName": conv["project_name"],
-            "projectData": conv.get("projectData", {}),
-            "projectGenerated": False,
-        }
-
-    return {
-        "error": "Unknown state",
-        "projectName": None,
-        "projectData": {},
-        "projectGenerated": False,
+    return project_name, {
+        "domain": domain,
+        "architecture": architecture.get("style", "unknown"),
+        "projectPath": str(destination),
+        "entities": spec.get("entities", []),
+        "modules": spec.get("modules", []),
     }
 
 
 @app.get("/")
-async def get_root():
-    """Serve the main HTML page."""
+async def root() -> FileResponse:
     return FileResponse(web_dir / "index.html")
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """Handle chat messages and coordinate with the factory."""
+async def chat(request: ChatRequest) -> ChatResponse:
+    conv = get_or_create_conversation(request.conversationId)
+    message = request.message.strip()
+
     try:
-        conv = get_or_create_conversation(request.conversationId)
-        conv["messages"].append({"role": "user", "content": request.message})
+        schema = load_constraint_schema()
 
-        result = build_assistant_response(conv, request.message)
-        conv["messages"].append({"role": "assistant", "content": result["response"]})
+        if conv["state"] == "initial":
+            conv["goal"] = message
+            conv["domain"] = factory.infer_domain(message)
+            conv["constraints"] = parse_constraints_from_message(
+                message,
+                conv["constraints"],
+                conv["domain"],
+                schema,
+            )
+            next_q = next_missing_question(conv["constraints"], conv["domain"], schema)
+            if next_q:
+                conv["state"] = "collecting_constraints"
+                return ChatResponse(
+                    response=(
+                        f"Entendi. Objetivo: {conv['goal']}\n\n"
+                        f"Pergunta rapida: {next_q}"
+                    ),
+                    projectName=None,
+                    projectData=conv["constraints"],
+                )
 
-        return ChatResponse(**result)
+            conv["state"] = "generating"
 
-    except Exception as e:
+        if conv["state"] == "collecting_constraints":
+            parsed = parse_constraints_from_message(
+                message,
+                conv["constraints"],
+                conv["domain"],
+                schema,
+            )
+            conv["constraints"].update(parsed)
+            next_q = next_missing_question(conv["constraints"], conv["domain"], schema)
+            if next_q:
+                return ChatResponse(
+                    response=f"Perfeito. Agora: {next_q}",
+                    projectName=None,
+                    projectData=conv["constraints"],
+                )
+            conv["state"] = "generating"
+
+        if conv["state"] == "generating":
+            project_name, details = build_project(conv["goal"], conv["constraints"])
+            conv["state"] = "complete"
+            conv["project_name"] = project_name
+            conv["domain"] = details["domain"]
+            conv["architecture"] = details["architecture"]
+
+            response = (
+                "Projeto gerado com sucesso.\n\n"
+                f"Projeto: {project_name}\n"
+                f"Dominio: {details['domain']}\n"
+                f"Arquitetura: {details['architecture']}\n"
+                f"Pasta: {details['projectPath']}\n\n"
+                "Proximo passo: abra planning/execution-plan.md no projeto gerado."
+            )
+            return ChatResponse(
+                response=response,
+                projectName=project_name,
+                projectData=details,
+                projectGenerated=True,
+                projectPath=details["projectPath"],
+                systemMessage="Projeto pronto.",
+            )
+
+        return ChatResponse(
+            response=(
+                f"Seu projeto {conv.get('project_name', '')} ja foi criado. "
+                "Se quiser, descreva um novo projeto para iniciar outra geracao."
+            ),
+            projectName=conv.get("project_name") or None,
+            projectData={
+                "domain": conv.get("domain", ""),
+                "architecture": conv.get("architecture", ""),
+            },
+        )
+
+    except Exception as exc:
         return ChatResponse(
             response="",
-            error=f"Server error: {str(e)}",
+            error=f"Falha ao processar requisicao: {exc}",
             projectName=None,
-            projectData={},
+            projectData=None,
             projectGenerated=False,
         )
 
 
 @app.get("/api/health")
-async def health():
-    """Health check endpoint."""
+async def health() -> dict[str, str]:
     return {"status": "ok", "service": "metaprogramming-web"}
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8080)
