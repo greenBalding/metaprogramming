@@ -21,6 +21,7 @@ This repository currently contains a first MVP of that concept.
 - [How It Works Internally](#how-it-works-internally)
 - [Architecture Selection Rules](#architecture-selection-rules)
 - [Quality Gates](#quality-gates)
+- [Dry-Run Execution](#dry-run-execution)
 - [Repository Layout](#repository-layout)
 - [Current Example Output](#current-example-output)
 - [Roadmap](#roadmap)
@@ -214,6 +215,31 @@ python3 autonomous_factory/factory.py \
   --output generated \
   --force
 ```
+
+---
+
+## Dry-Run Execution
+
+The generator can also produce an execution report without performing real changes.
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name dry-run-sga \
+  --constraint users=15000 \
+  --constraint cloud=aws \
+  --constraint compliance=LGPD \
+  --dry-run-execution \
+  --output generated \
+  --force
+```
+
+This adds:
+
+- `execution/report.json`
+- `execution/runbook.md`
+
+These artifacts summarize phase status and the next safe action.
 
 ---
 

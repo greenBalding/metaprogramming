@@ -41,6 +41,18 @@ Esse modo pergunta, quando necessario:
 - compliance
 - canal principal de entrega
 
+### Dry-run de execucao
+
+Para gerar um relatorio de execucao por fase sem executar mudanças reais:
+
+```bash
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name dry-run-sga \
+  --dry-run-execution \
+  --output generated
+```
+
 ## Saida esperada
 
 Ao final, voce tera uma estrutura como:

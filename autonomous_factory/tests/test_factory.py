@@ -95,6 +95,46 @@ class FactoryTests(unittest.TestCase):
                     msg=f"Missing generated artifact: {relative_path}",
                 )
 
+    def test_execution_report_includes_phase_statuses(self):
+        constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
+        spec = factory.build_spec("build a SGA", "academic_management", constraints)
+        architecture = factory.choose_architecture(constraints, "academic_management")
+        backlog = factory.build_backlog(spec, architecture)
+
+        execution_report = factory.build_execution_report(spec, architecture, backlog)
+
+        self.assertEqual(execution_report["goal"], "build a SGA")
+        self.assertEqual(execution_report["domain"], "academic_management")
+        self.assertEqual(len(execution_report["phase_summary"]), len(backlog))
+        self.assertEqual(
+            execution_report["phase_summary"][0]["status"], "ready"
+        )
+        self.assertIn("planned_modules", execution_report["module_coverage"])
+
+    def test_write_project_persists_execution_artifacts(self):
+        with TemporaryDirectory() as tmp_dir:
+            output_root = Path(tmp_dir)
+            project_name = "sga-execution"
+            project_root = output_root / project_name
+
+            constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
+            spec = factory.build_spec("build a SGA", "academic_management", constraints)
+            architecture = factory.choose_architecture(constraints, "academic_management")
+            backlog = factory.build_backlog(spec, architecture)
+            execution_report = factory.build_execution_report(spec, architecture, backlog)
+
+            factory.write_project(
+                project_root,
+                project_name,
+                spec,
+                architecture,
+                backlog,
+                execution_report,
+            )
+
+            self.assertTrue((project_root / "execution/report.json").exists())
+            self.assertTrue((project_root / "execution/runbook.md").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
