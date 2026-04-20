@@ -1,0 +1,117 @@
+{
+  "goal": "criar um jogo da velha em python com interface",
+  "domain": "generic_web_application",
+  "project_name": "criar-um-jogo-da-velha-em-python-com-interface",
+  "generated_at": "2026-04-20T16:56:13.716010+00:00",
+  "constraints": {
+    "users": 2,
+    "cloud": "aws"
+  },
+  "assumptions": [
+    "Web-based delivery.",
+    "Relational persistence."
+  ],
+  "entities": [
+    "User",
+    "Resource",
+    "AuditEvent"
+  ],
+  "modules": [
+    "authentication",
+    "core_domain",
+    "reporting"
+  ],
+  "workflows": [
+    "Create and manage resources",
+    "Track user actions"
+  ],
+  "non_functional": {
+    "availability": "99.5%",
+    "api_p95_latency": "< 400ms",
+    "security": [
+      "RBAC",
+      "audit logs"
+    ]
+  },
+  "governance": {
+    "approval_gates": [
+      "Production deployment",
+      "Destructive database migrations",
+      "Permission model changes"
+    ],
+    "mandatory_checks": [
+      "Unit tests",
+      "Static analysis",
+      "Dependency vulnerability scan"
+    ]
+  },
+  "architecture": {
+    "style": "modular monolith",
+    "backend": "Python API",
+    "frontend": "Web dashboard",
+    "database": "PostgreSQL",
+    "deployment": "multi-environment deployment with staging and production",
+    "cloud": "aws",
+    "rationale": [
+      "Fastest path to value for small and medium institutions.",
+      "Operational complexity stays low while keeping clear module boundaries."
+    ]
+  },
+  "backlog": [
+    {
+      "phase": "P0 - Formalize requirements",
+      "tasks": [
+        "Validate goal against domain ontology",
+        "Resolve missing constraints and assumptions",
+        "Freeze machine-readable specification"
+      ],
+      "exit_criteria": [
+        "requirements.json approved",
+        "Risk list reviewed"
+      ]
+    },
+    {
+      "phase": "P1 - Architecture baseline",
+      "tasks": [
+        "Adopt architecture style: modular monolith",
+        "Define API contract and database schema",
+        "Set CI quality gates"
+      ],
+      "exit_criteria": [
+        "ADR accepted",
+        "Schema reviewed"
+      ]
+    },
+    {
+      "phase": "P2 - Build core modules",
+      "tasks": [
+        "Implement module: authentication",
+        "Implement module: core_domain",
+        "Implement module: reporting"
+      ],
+      "exit_criteria": [
+        "Smoke tests passing",
+        "No high-severity static analysis issues"
+      ]
+    },
+    {
+      "phase": "P3 - Validation and hardening",
+      "tasks": [
+        "Run integration scenarios",
+        "Validate security controls",
+        "Execute rollback drill in staging"
+      ],
+      "exit_criteria": [
+        "All critical scenarios pass",
+        "Release gate approved"
+      ]
+    }
+  ],
+  "acceptance_focus": {
+    "primary_phase": "P0 - Formalize requirements",
+    "primary_exit_criteria": [
+      "requirements.json approved",
+      "Risk list reviewed"
+    ]
+  }
+}

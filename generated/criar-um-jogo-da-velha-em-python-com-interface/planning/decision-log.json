@@ -1,0 +1,52 @@
+{
+  "goal": "criar um jogo da velha em python com interface",
+  "domain": "generic_web_application",
+  "project_name": "criar-um-jogo-da-velha-em-python-com-interface",
+  "constraints": {
+    "users": 2,
+    "cloud": "aws"
+  },
+  "generated_at": "2026-04-20T16:56:13.715647+00:00",
+  "entries": [
+    {
+      "index": 1,
+      "key": "goal",
+      "value": "criar um jogo da velha em python com interface",
+      "source": "input",
+      "note": null
+    },
+    {
+      "index": 2,
+      "key": "domain",
+      "value": "generic_web_application",
+      "source": "inference",
+      "note": "Inferred from goal keywords."
+    },
+    {
+      "index": 3,
+      "key": "project_name",
+      "value": "criar-um-jogo-da-velha-em-python-com-interface",
+      "source": "derived",
+      "note": null
+    },
+    {
+      "index": 4,
+      "key": "cloud",
+      "value": "aws",
+      "source": "chat",
+      "note": null
+    },
+    {
+      "index": 5,
+      "key": "users",
+      "value": 2,
+      "source": "chat",
+      "note": null
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256",
+    "hash": "c414bac2ea9a68a188c485816f7a7133f423c7ecf007cef5f7f2cc66d057bf45",
+    "artifact": "planning/decision-log.json"
+  }
+}

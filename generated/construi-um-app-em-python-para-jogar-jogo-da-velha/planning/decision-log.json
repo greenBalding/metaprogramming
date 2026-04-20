@@ -1,0 +1,52 @@
+{
+  "goal": "construi um app em python para jogar jogo da velha",
+  "domain": "generic_web_application",
+  "project_name": "construi-um-app-em-python-para-jogar-jogo-da-velha",
+  "constraints": {
+    "users": 1000,
+    "cloud": "aws"
+  },
+  "generated_at": "2026-04-20T16:53:40.899940+00:00",
+  "entries": [
+    {
+      "index": 1,
+      "key": "goal",
+      "value": "construi um app em python para jogar jogo da velha",
+      "source": "input",
+      "note": null
+    },
+    {
+      "index": 2,
+      "key": "domain",
+      "value": "generic_web_application",
+      "source": "inference",
+      "note": "Inferred from goal keywords."
+    },
+    {
+      "index": 3,
+      "key": "project_name",
+      "value": "construi-um-app-em-python-para-jogar-jogo-da-velha",
+      "source": "derived",
+      "note": null
+    },
+    {
+      "index": 4,
+      "key": "cloud",
+      "value": "aws",
+      "source": "chat",
+      "note": null
+    },
+    {
+      "index": 5,
+      "key": "users",
+      "value": 1000,
+      "source": "chat",
+      "note": null
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256",
+    "hash": "e6e88a03f39cdadf05673f6a5d7b0e5f71da2d3777c6c5bee938356f224066f1",
+    "artifact": "planning/decision-log.json"
+  }
+}

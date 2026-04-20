@@ -1,0 +1,52 @@
+{
+  "goal": "criar um jogo de xadrez com interface web",
+  "domain": "generic_web_application",
+  "project_name": "criar-um-jogo-de-xadrez-com-interface-web",
+  "constraints": {
+    "users": 2,
+    "cloud": "aws"
+  },
+  "generated_at": "2026-04-20T17:01:35.651833+00:00",
+  "entries": [
+    {
+      "index": 1,
+      "key": "goal",
+      "value": "criar um jogo de xadrez com interface web",
+      "source": "input",
+      "note": null
+    },
+    {
+      "index": 2,
+      "key": "domain",
+      "value": "generic_web_application",
+      "source": "inference",
+      "note": "Inferred from goal keywords."
+    },
+    {
+      "index": 3,
+      "key": "project_name",
+      "value": "criar-um-jogo-de-xadrez-com-interface-web",
+      "source": "derived",
+      "note": null
+    },
+    {
+      "index": 4,
+      "key": "cloud",
+      "value": "aws",
+      "source": "chat",
+      "note": null
+    },
+    {
+      "index": 5,
+      "key": "users",
+      "value": 2,
+      "source": "chat",
+      "note": null
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256",
+    "hash": "b27ba8bab6ff4c0ba9ca7d3380bd3d6147e0c75cf3a4e5665ae64f5e2689981f",
+    "artifact": "planning/decision-log.json"
+  }
+}

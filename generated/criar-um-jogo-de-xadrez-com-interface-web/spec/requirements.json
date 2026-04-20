@@ -1,0 +1,47 @@
+{
+  "goal": "criar um jogo de xadrez com interface web",
+  "domain": "generic_web_application",
+  "generated_at": "2026-04-20T17:01:35.651820+00:00",
+  "constraints": {
+    "users": 2,
+    "cloud": "aws"
+  },
+  "assumptions": [
+    "Web-based delivery.",
+    "Relational persistence."
+  ],
+  "entities": [
+    "User",
+    "Resource",
+    "AuditEvent"
+  ],
+  "modules": [
+    "authentication",
+    "core_domain",
+    "reporting"
+  ],
+  "workflows": [
+    "Create and manage resources",
+    "Track user actions"
+  ],
+  "non_functional": {
+    "availability": "99.5%",
+    "api_p95_latency": "< 400ms",
+    "security": [
+      "RBAC",
+      "audit logs"
+    ]
+  },
+  "governance": {
+    "approval_gates": [
+      "Production deployment",
+      "Destructive database migrations",
+      "Permission model changes"
+    ],
+    "mandatory_checks": [
+      "Unit tests",
+      "Static analysis",
+      "Dependency vulnerability scan"
+    ]
+  }
+}

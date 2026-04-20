@@ -1,0 +1,227 @@
+{
+  "goal": "construi um app em python para jogar jogo da velha",
+  "domain": "generic_web_application",
+  "spec_snapshot": {
+    "goal": "construi um app em python para jogar jogo da velha",
+    "domain": "generic_web_application",
+    "generated_at": "2026-04-20T16:53:40.899928+00:00",
+    "constraints": {
+      "users": 1000,
+      "cloud": "aws"
+    },
+    "assumptions": [
+      "Web-based delivery.",
+      "Relational persistence."
+    ],
+    "entities": [
+      "User",
+      "Resource",
+      "AuditEvent"
+    ],
+    "modules": [
+      "authentication",
+      "core_domain",
+      "reporting"
+    ],
+    "workflows": [
+      "Create and manage resources",
+      "Track user actions"
+    ],
+    "non_functional": {
+      "availability": "99.5%",
+      "api_p95_latency": "< 400ms",
+      "security": [
+        "RBAC",
+        "audit logs"
+      ]
+    },
+    "governance": {
+      "approval_gates": [
+        "Production deployment",
+        "Destructive database migrations",
+        "Permission model changes"
+      ],
+      "mandatory_checks": [
+        "Unit tests",
+        "Static analysis",
+        "Dependency vulnerability scan"
+      ]
+    }
+  },
+  "selected_architecture": {
+    "style": "modular monolith",
+    "backend": "Python API",
+    "frontend": "Web dashboard",
+    "database": "PostgreSQL",
+    "deployment": "multi-environment deployment with staging and production",
+    "cloud": "aws",
+    "rationale": [
+      "Fastest path to value for small and medium institutions.",
+      "Operational complexity stays low while keeping clear module boundaries."
+    ]
+  },
+  "phase_summary": [
+    {
+      "order": 1,
+      "name": "P0 - Formalize requirements",
+      "status": "ready",
+      "tasks": [
+        "Validate goal against domain ontology",
+        "Resolve missing constraints and assumptions",
+        "Freeze machine-readable specification"
+      ],
+      "task_status": [
+        {
+          "id": "P1-T1",
+          "title": "Validate goal against domain ontology",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p01/t01-validate-goal-against-domain-ontology.md"
+        },
+        {
+          "id": "P1-T2",
+          "title": "Resolve missing constraints and assumptions",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p01/t02-resolve-missing-constraints-and-assumptions.md"
+        },
+        {
+          "id": "P1-T3",
+          "title": "Freeze machine-readable specification",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p01/t03-freeze-machine-readable-specification.md"
+        }
+      ],
+      "exit_criteria": [
+        "requirements.json approved",
+        "Risk list reviewed"
+      ],
+      "modules": []
+    },
+    {
+      "order": 2,
+      "name": "P1 - Architecture baseline",
+      "status": "pending",
+      "tasks": [
+        "Adopt architecture style: modular monolith",
+        "Define API contract and database schema",
+        "Set CI quality gates"
+      ],
+      "task_status": [
+        {
+          "id": "P2-T1",
+          "title": "Adopt architecture style: modular monolith",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p02/t01-adopt-architecture-style-modular-monolith.md"
+        },
+        {
+          "id": "P2-T2",
+          "title": "Define API contract and database schema",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p02/t02-define-api-contract-and-database-schema.md"
+        },
+        {
+          "id": "P2-T3",
+          "title": "Set CI quality gates",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p02/t03-set-ci-quality-gates.md"
+        }
+      ],
+      "exit_criteria": [
+        "ADR accepted",
+        "Schema reviewed"
+      ],
+      "modules": []
+    },
+    {
+      "order": 3,
+      "name": "P2 - Build core modules",
+      "status": "pending",
+      "tasks": [
+        "Implement module: authentication",
+        "Implement module: core_domain",
+        "Implement module: reporting"
+      ],
+      "task_status": [
+        {
+          "id": "P3-T1",
+          "title": "Implement module: authentication",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p03/t01-implement-module-authentication.md"
+        },
+        {
+          "id": "P3-T2",
+          "title": "Implement module: core_domain",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p03/t02-implement-module-core-domain.md"
+        },
+        {
+          "id": "P3-T3",
+          "title": "Implement module: reporting",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p03/t03-implement-module-reporting.md"
+        }
+      ],
+      "exit_criteria": [
+        "Smoke tests passing",
+        "No high-severity static analysis issues"
+      ],
+      "modules": [
+        "authentication",
+        "core_domain",
+        "reporting"
+      ]
+    },
+    {
+      "order": 4,
+      "name": "P3 - Validation and hardening",
+      "status": "pending",
+      "tasks": [
+        "Run integration scenarios",
+        "Validate security controls",
+        "Execute rollback drill in staging"
+      ],
+      "task_status": [
+        {
+          "id": "P4-T1",
+          "title": "Run integration scenarios",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p04/t01-run-integration-scenarios.md"
+        },
+        {
+          "id": "P4-T2",
+          "title": "Validate security controls",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p04/t02-validate-security-controls.md"
+        },
+        {
+          "id": "P4-T3",
+          "title": "Execute rollback drill in staging",
+          "status": "pending",
+          "last_updated": null,
+          "evidence_file": "execution/evidence/p04/t03-execute-rollback-drill-in-staging.md"
+        }
+      ],
+      "exit_criteria": [
+        "All critical scenarios pass",
+        "Release gate approved"
+      ],
+      "modules": []
+    }
+  ],
+  "history": [],
+  "audit_trail": [],
+  "rolled_back_event_ids": [],
+  "last_action": "initialized",
+  "last_error": null,
+  "last_updated": "2026-04-20T16:53:40.900240+00:00"
+}

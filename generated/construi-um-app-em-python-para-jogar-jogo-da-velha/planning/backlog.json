@@ -1,0 +1,50 @@
+[
+  {
+    "phase": "P0 - Formalize requirements",
+    "tasks": [
+      "Validate goal against domain ontology",
+      "Resolve missing constraints and assumptions",
+      "Freeze machine-readable specification"
+    ],
+    "exit_criteria": [
+      "requirements.json approved",
+      "Risk list reviewed"
+    ]
+  },
+  {
+    "phase": "P1 - Architecture baseline",
+    "tasks": [
+      "Adopt architecture style: modular monolith",
+      "Define API contract and database schema",
+      "Set CI quality gates"
+    ],
+    "exit_criteria": [
+      "ADR accepted",
+      "Schema reviewed"
+    ]
+  },
+  {
+    "phase": "P2 - Build core modules",
+    "tasks": [
+      "Implement module: authentication",
+      "Implement module: core_domain",
+      "Implement module: reporting"
+    ],
+    "exit_criteria": [
+      "Smoke tests passing",
+      "No high-severity static analysis issues"
+    ]
+  },
+  {
+    "phase": "P3 - Validation and hardening",
+    "tasks": [
+      "Run integration scenarios",
+      "Validate security controls",
+      "Execute rollback drill in staging"
+    ],
+    "exit_criteria": [
+      "All critical scenarios pass",
+      "Release gate approved"
+    ]
+  }
+]
