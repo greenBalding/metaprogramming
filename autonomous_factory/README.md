@@ -41,6 +41,9 @@ Esse modo pergunta, quando necessario:
 - compliance
 - canal principal de entrega
 
+Na primeira execucao, se `config/local_llm.json` nao existir, ele e criado
+automaticamente com recomendacao baseada no hardware local.
+
 ### Dry-run de execucao
 
 Para gerar um relatorio de execucao por fase sem executar mudanças reais:

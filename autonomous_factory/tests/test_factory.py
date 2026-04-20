@@ -61,6 +61,44 @@ class FactoryTests(unittest.TestCase):
             )
         self.assertEqual(constraints, initial)
 
+    def test_ensure_local_llm_config_writes_file(self):
+        with TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            created = factory.ensure_local_llm_config(
+                repo_root,
+                {
+                    "provider": "ollama",
+                    "model": "qwen2.5-coder:7b",
+                },
+            )
+            self.assertTrue(created)
+            config_path = repo_root / "config/local_llm.json"
+            self.assertTrue(config_path.exists())
+
+    def test_ensure_local_llm_config_is_idempotent(self):
+        with TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            first = factory.ensure_local_llm_config(
+                repo_root,
+                {
+                    "provider": "ollama",
+                    "model": "qwen2.5-coder:7b",
+                },
+            )
+            second = factory.ensure_local_llm_config(
+                repo_root,
+                {
+                    "provider": "ollama",
+                    "model": "qwen2.5-coder:14b",
+                },
+            )
+            self.assertTrue(first)
+            self.assertFalse(second)
+
+            config_path = repo_root / "config/local_llm.json"
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["model"], "qwen2.5-coder:7b")
+
     def test_write_project_creates_expected_artifacts(self):
         with TemporaryDirectory() as tmp_dir:
             output_root = Path(tmp_dir)

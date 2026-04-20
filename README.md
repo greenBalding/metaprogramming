@@ -62,6 +62,9 @@ The current implementation is a CLI in [autonomous_factory/factory.py](autonomou
 
 It is intentionally lightweight and deterministic by design.
 
+On first run, the CLI also auto-generates `config/local_llm.json` if it does not exist,
+using local hardware analysis to recommend a default local model.
+
 ---
 
 ## Interactive Quick Start
