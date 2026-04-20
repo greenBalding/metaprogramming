@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from autonomous_factory import factory
@@ -31,7 +33,9 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(large["style"], "microservices + event-driven")
 
     def test_collect_constraints_interactively_defaults(self):
-        with patch("builtins.input", side_effect=["", "", "", "", ""]):
+        with patch("builtins.input", side_effect=["", "", "", "", ""]), patch(
+            "builtins.print"
+        ):
             constraints = factory.collect_constraints_interactively(
                 {}, "academic_management"
             )
@@ -50,10 +54,46 @@ class FactoryTests(unittest.TestCase):
             "compliance": ["LGPD"],
             "delivery": "hybrid",
         }
-        constraints = factory.collect_constraints_interactively(
-            initial, "academic_management"
-        )
+        with patch("builtins.print"):
+            constraints = factory.collect_constraints_interactively(
+                initial, "academic_management"
+            )
         self.assertEqual(constraints, initial)
+
+    def test_write_project_creates_expected_artifacts(self):
+        with TemporaryDirectory() as tmp_dir:
+            output_root = Path(tmp_dir)
+            project_name = "sga-ci"
+            project_root = output_root / project_name
+
+            constraints = {
+                "users": 12000,
+                "cloud": "aws",
+                "budget": "medium",
+                "compliance": ["LGPD"],
+            }
+            spec = factory.build_spec("build a SGA", "academic_management", constraints)
+            architecture = factory.choose_architecture(constraints, "academic_management")
+            backlog = factory.build_backlog(spec, architecture)
+
+            factory.write_project(project_root, project_name, spec, architecture, backlog)
+
+            expected_files = [
+                "README.md",
+                "spec/requirements.json",
+                "architecture/adr-0001-initial-architecture.md",
+                "planning/backlog.json",
+                "planning/execution-plan.md",
+                "governance/release-gates.md",
+                "scaffold/backend/app/main.py",
+                "scaffold/database/schema.sql",
+                "scaffold/frontend/index.html",
+            ]
+            for relative_path in expected_files:
+                self.assertTrue(
+                    (project_root / relative_path).exists(),
+                    msg=f"Missing generated artifact: {relative_path}",
+                )
 
 
 if __name__ == "__main__":

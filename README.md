@@ -18,6 +18,7 @@ This repository currently contains a first MVP of that concept.
 - [What Gets Generated](#what-gets-generated)
 - [How It Works Internally](#how-it-works-internally)
 - [Architecture Selection Rules](#architecture-selection-rules)
+- [Quality Gates](#quality-gates)
 - [Repository Layout](#repository-layout)
 - [Current Example Output](#current-example-output)
 - [Roadmap](#roadmap)
@@ -178,6 +179,33 @@ Additional constraints influence:
 - `budget=low` -> simpler deployment recommendation
 - `cloud=<provider>` -> target cloud recorded in ADR
 - `compliance=...` -> compliance list recorded in spec
+
+---
+
+## Quality Gates
+
+This repository now includes CI at [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
+On every push and pull request to `main`, CI runs:
+
+1. Unit tests for generator logic
+2. Smoke generation of an SGA project
+3. Artifact existence checks for core outputs
+
+Local equivalent commands:
+
+```bash
+python3 -m unittest discover -s autonomous_factory/tests -p "test_*.py"
+
+python3 autonomous_factory/factory.py \
+  --goal "build a SGA" \
+  --project-name local-smoke-sga \
+  --constraint users=15000 \
+  --constraint cloud=aws \
+  --constraint compliance=LGPD \
+  --output generated \
+  --force
+```
 
 ---
 

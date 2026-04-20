@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run unit tests
+        run: python -m unittest discover -s autonomous_factory/tests -p "test_*.py"
+
+      - name: Smoke test generation
+        run: |
+          python autonomous_factory/factory.py \
+            --goal "build a SGA" \
+            --project-name ci-smoke-sga \
+            --constraint users=15000 \
+            --constraint cloud=aws \
+            --constraint compliance=LGPD \
+            --output generated \
+            --force
+
+      - name: Verify generated artifacts
+        run: |
+          test -f generated/ci-smoke-sga/spec/requirements.json
+          test -f generated/ci-smoke-sga/architecture/adr-0001-initial-architecture.md
+          test -f generated/ci-smoke-sga/planning/execution-plan.md
+          test -f generated/ci-smoke-sga/scaffold/backend/app/main.py
