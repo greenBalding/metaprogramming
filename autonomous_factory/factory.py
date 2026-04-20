@@ -155,6 +155,23 @@ def parse_constraints(raw_constraints: list[str]) -> dict[str, Any]:
     return constraints
 
 
+def append_decision(
+    decision_entries: list[dict[str, Any]],
+    key: str,
+    value: Any,
+    source: str,
+    note: str | None = None,
+) -> None:
+    entry = {
+        "key": key,
+        "value": value,
+        "source": source,
+    }
+    if note:
+        entry["note"] = note
+    decision_entries.append(entry)
+
+
 def read_input(prompt: str, default: str | None = None) -> str:
     suffix = f" [{default}]" if default else ""
     try:
@@ -190,28 +207,63 @@ def read_csv(prompt: str, default: list[str] | None = None) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def prompt_project_name_interactively(project_name: str) -> str:
+def prompt_project_name_interactively(
+    project_name: str,
+    decision_entries: list[dict[str, Any]] | None = None,
+) -> str:
     suggested = project_name or "autonomous-project"
     chosen_name = read_input("Project name", suggested)
-    return slugify(chosen_name)
+    normalized_name = slugify(chosen_name)
+    if decision_entries is not None:
+        append_decision(
+            decision_entries,
+            key="project_name",
+            value=normalized_name,
+            source="interactive",
+            note="Provided through interactive interview.",
+        )
+    return normalized_name
 
 
 def collect_constraints_interactively(
-    constraints: dict[str, Any], domain: str
+    constraints: dict[str, Any],
+    domain: str,
+    decision_entries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     interactive_constraints = dict(constraints)
     print("Interactive mode enabled. Press Enter to accept defaults.")
 
     if "users" not in interactive_constraints and "max_users" not in interactive_constraints:
         interactive_constraints["users"] = read_int("Estimated users", 3000)
+        if decision_entries is not None:
+            append_decision(
+                decision_entries,
+                key="users",
+                value=interactive_constraints["users"],
+                source="interactive",
+            )
 
     if "cloud" not in interactive_constraints:
         interactive_constraints["cloud"] = read_input("Cloud provider", "agnostic")
+        if decision_entries is not None:
+            append_decision(
+                decision_entries,
+                key="cloud",
+                value=interactive_constraints["cloud"],
+                source="interactive",
+            )
 
     if "budget" not in interactive_constraints:
         interactive_constraints["budget"] = read_choice(
             "Budget profile", ["low", "medium", "high"], "medium"
         )
+        if decision_entries is not None:
+            append_decision(
+                decision_entries,
+                key="budget",
+                value=interactive_constraints["budget"],
+                source="interactive",
+            )
 
     if "compliance" not in interactive_constraints and "regulations" not in interactive_constraints:
         default_compliance = ["LGPD"] if domain == "academic_management" else []
@@ -220,11 +272,25 @@ def collect_constraints_interactively(
         )
         if compliance:
             interactive_constraints["compliance"] = compliance
+            if decision_entries is not None:
+                append_decision(
+                    decision_entries,
+                    key="compliance",
+                    value=interactive_constraints["compliance"],
+                    source="interactive",
+                )
 
     if domain == "academic_management" and "delivery" not in interactive_constraints:
         interactive_constraints["delivery"] = read_choice(
             "Primary delivery channel", ["web", "mobile", "hybrid"], "web"
         )
+        if decision_entries is not None:
+            append_decision(
+                decision_entries,
+                key="delivery",
+                value=interactive_constraints["delivery"],
+                source="interactive",
+            )
 
     return interactive_constraints
 
@@ -442,6 +508,33 @@ def build_execution_report(
             "included_in_phases": completed_modules,
         },
         "next_action": "Approve requirements, then implement P2 modules in order.",
+    }
+
+
+def build_decision_log(
+    goal: str,
+    domain: str,
+    project_name: str,
+    constraints: dict[str, Any],
+    decision_entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    normalized_entries = [
+        {
+            "index": index,
+            "key": entry["key"],
+            "value": entry["value"],
+            "source": entry["source"],
+            "note": entry.get("note"),
+        }
+        for index, entry in enumerate(decision_entries, start=1)
+    ]
+    return {
+        "goal": goal,
+        "domain": domain,
+        "project_name": project_name,
+        "constraints": constraints,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "entries": normalized_entries,
     }
 
 
@@ -1151,6 +1244,28 @@ def render_execution_runbook(execution_report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def render_decision_log(decision_log: dict[str, Any]) -> str:
+    lines: list[str] = ["# Decision Log", ""]
+    lines.append(f"Goal: {decision_log['goal']}")
+    lines.append(f"Domain: {decision_log['domain']}")
+    lines.append(f"Project name: {decision_log['project_name']}")
+    lines.append("")
+    lines.append("## Entries")
+    lines.append("")
+    for entry in decision_log.get("entries", []):
+        note = f" ({entry['note']})" if entry.get("note") else ""
+        lines.append(
+            f"- {entry['index']}. {entry['key']} = {entry['value']} [{entry['source']}]" + note
+        )
+    lines.append("")
+    lines.append("## Final Constraints")
+    lines.append("")
+    lines.append("```json")
+    lines.append(json.dumps(decision_log.get("constraints", {}), indent=2, ensure_ascii=True))
+    lines.append("```")
+    return "\n".join(lines)
+
+
 def write_file(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
@@ -1359,6 +1474,7 @@ def write_project(
     spec: dict[str, Any],
     architecture: dict[str, Any],
     backlog: list[dict[str, Any]],
+    decision_log: dict[str, Any] | None = None,
     execution_report: dict[str, Any] | None = None,
     execution_state: dict[str, Any] | None = None,
 ) -> None:
@@ -1370,6 +1486,16 @@ def write_project(
     )
     write_file(root / "planning/backlog.json", json.dumps(backlog, indent=2, ensure_ascii=True))
     write_file(root / "planning/execution-plan.md", render_execution_plan(backlog))
+
+    if decision_log is not None:
+        write_file(
+            root / "planning/decision-log.json",
+            json.dumps(decision_log, indent=2, ensure_ascii=True),
+        )
+        write_file(
+            root / "planning/decision-log.md",
+            render_decision_log(decision_log),
+        )
 
     release_gates = spec["governance"]["approval_gates"]
     gates_markdown = "\n".join(f"- {gate}" for gate in release_gates)
@@ -1437,12 +1563,41 @@ def main() -> int:
 
     domain = infer_domain(args.goal)
     project_name = args.project_name or slugify(args.goal)
+    decision_entries: list[dict[str, Any]] = []
+    append_decision(decision_entries, key="goal", value=args.goal, source="input")
+    append_decision(
+        decision_entries,
+        key="domain",
+        value=domain,
+        source="inference",
+        note="Inferred from goal keywords.",
+    )
+    append_decision(
+        decision_entries,
+        key="project_name",
+        value=project_name,
+        source="cli" if args.project_name else "derived",
+    )
+    for key, value in sorted(constraints.items()):
+        append_decision(decision_entries, key=key, value=value, source="cli")
 
     if args.interactive:
-        project_name = prompt_project_name_interactively(project_name)
-        constraints = collect_constraints_interactively(constraints, domain)
+        project_name = prompt_project_name_interactively(project_name, decision_entries)
+        constraints = collect_constraints_interactively(
+            constraints,
+            domain,
+            decision_entries,
+        )
         print("Resolved constraints:")
         print(json.dumps(constraints, indent=2, ensure_ascii=True))
+
+    decision_log = build_decision_log(
+        args.goal,
+        domain,
+        project_name,
+        constraints,
+        decision_entries,
+    )
 
     output_root = Path(args.output).expanduser().resolve()
     destination = output_root / project_name
@@ -1513,6 +1668,7 @@ def main() -> int:
         spec,
         architecture,
         backlog,
+        decision_log,
         execution_report,
         execution_state,
     )

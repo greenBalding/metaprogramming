@@ -75,8 +75,24 @@ class FactoryTests(unittest.TestCase):
             spec = factory.build_spec("build a SGA", "academic_management", constraints)
             architecture = factory.choose_architecture(constraints, "academic_management")
             backlog = factory.build_backlog(spec, architecture)
+            decision_log = factory.build_decision_log(
+                "build a SGA",
+                "academic_management",
+                project_name,
+                constraints,
+                [
+                    {"key": "goal", "value": "build a SGA", "source": "input"},
+                ],
+            )
 
-            factory.write_project(project_root, project_name, spec, architecture, backlog)
+            factory.write_project(
+                project_root,
+                project_name,
+                spec,
+                architecture,
+                backlog,
+                decision_log,
+            )
 
             expected_files = [
                 "README.md",
@@ -84,6 +100,8 @@ class FactoryTests(unittest.TestCase):
                 "architecture/adr-0001-initial-architecture.md",
                 "planning/backlog.json",
                 "planning/execution-plan.md",
+                "planning/decision-log.json",
+                "planning/decision-log.md",
                 "governance/release-gates.md",
                 "scaffold/backend/app/main.py",
                 "scaffold/database/schema.sql",
@@ -110,6 +128,25 @@ class FactoryTests(unittest.TestCase):
             execution_report["phase_summary"][0]["status"], "ready"
         )
         self.assertIn("planned_modules", execution_report["module_coverage"])
+
+    def test_build_decision_log_contains_expected_entries(self):
+        decision_entries = [
+            {"key": "goal", "value": "build a SGA", "source": "input"},
+            {"key": "domain", "value": "academic_management", "source": "inference"},
+            {"key": "users", "value": 15000, "source": "cli"},
+        ]
+        decision_log = factory.build_decision_log(
+            "build a SGA",
+            "academic_management",
+            "sga-ci",
+            {"users": 15000},
+            decision_entries,
+        )
+
+        self.assertEqual(decision_log["project_name"], "sga-ci")
+        self.assertEqual(len(decision_log["entries"]), 3)
+        self.assertEqual(decision_log["entries"][1]["key"], "domain")
+        self.assertEqual(decision_log["entries"][1]["source"], "inference")
 
     def test_execution_state_advances_progressively(self):
         constraints = {"users": 15000, "cloud": "aws", "budget": "medium"}
@@ -139,6 +176,15 @@ class FactoryTests(unittest.TestCase):
             backlog = factory.build_backlog(spec, architecture)
             execution_report = factory.build_execution_report(spec, architecture, backlog)
             execution_state = factory.build_execution_state(spec, architecture, backlog)
+            decision_log = factory.build_decision_log(
+                "build a SGA",
+                "academic_management",
+                project_name,
+                constraints,
+                [
+                    {"key": "goal", "value": "build a SGA", "source": "input"},
+                ],
+            )
 
             factory.write_project(
                 project_root,
@@ -146,6 +192,7 @@ class FactoryTests(unittest.TestCase):
                 spec,
                 architecture,
                 backlog,
+                decision_log,
                 execution_report,
                 execution_state,
             )
@@ -155,6 +202,7 @@ class FactoryTests(unittest.TestCase):
             self.assertTrue((project_root / "execution/state.json").exists())
             self.assertTrue((project_root / "execution/state.md").exists())
             self.assertTrue((project_root / "execution/audit-trail.json").exists())
+            self.assertTrue((project_root / "planning/decision-log.json").exists())
 
     def test_execute_phase_actions_writes_evidence_and_advances_phase(self):
         with TemporaryDirectory() as tmp_dir:

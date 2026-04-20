@@ -238,6 +238,8 @@ This adds:
 
 - `execution/report.json`
 - `execution/runbook.md`
+- `planning/decision-log.json`
+- `planning/decision-log.md`
 
 ### Persistent Execution State
 
@@ -260,6 +262,8 @@ This persists:
 - `execution/audit-trail.json`
 
 These artifacts summarize phase status and the next safe action.
+
+The decision log tracks the provenance of key inputs (for example: CLI, inference, and interactive answers).
 
 ### Execute Current Phase (Idempotent)
 

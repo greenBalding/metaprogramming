@@ -53,6 +53,11 @@ python3 autonomous_factory/factory.py \
   --output generated
 ```
 
+Tambem sao gerados:
+
+- `planning/decision-log.json`
+- `planning/decision-log.md`
+
 ### Estado persistente
 
 Para avancar o estado entre execucoes:
